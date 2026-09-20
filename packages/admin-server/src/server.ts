@@ -48,9 +48,11 @@ export async function createAdminServer(opts: AdminServerOptions) {
   // Create session on server start
   const sessionId = sessionManager.createSession()
 
-  // Session validation hook for API routes
+  // Session validation hook for API routes (skip session + health endpoints)
   app.addHook('onRequest', async (request, reply) => {
     if (!request.url.startsWith('/api/')) return
+    if (request.url.startsWith('/api/v1/admin/session')) return
+    if (request.url.startsWith('/api/v1/admin/health')) return
     const cookieSession = request.cookies['kaddo-session']
     if (!sessionManager.validateSession(cookieSession)) {
       reply.code(401).send({ error: { code: 'SESSION_INVALID', message: 'Invalid or expired session.' } })
