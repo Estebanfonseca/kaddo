@@ -133,6 +133,15 @@ importers:
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
+      '@fastify/cookie':
+        specifier: ^11.1.0
+        version: 11.1.2
+      '@fastify/cors':
+        specifier: ^11.0.0
+        version: 11.3.0
+      '@fastify/static':
+        specifier: ^8.1.0
+        version: 8.3.0
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -142,6 +151,9 @@ importers:
       fast-glob:
         specifier: ^3.3.2
         version: 3.3.3
+      fastify:
+        specifier: ^5.3.3
+        version: 5.12.5
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3

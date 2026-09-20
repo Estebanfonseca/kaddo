@@ -77,7 +77,9 @@ export async function runAdmin(opts: AdminOpts = {}) {
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
     const bundled = path.resolve(__dirname, 'admin-server', 'index.js')
     if (exists(bundled)) {
-      adminServer = await import(bundled)
+      // Use file:// URL for Windows ESM compatibility
+      const { pathToFileURL } = await import('node:url')
+      adminServer = await import(pathToFileURL(bundled).href)
     } else {
       adminServer = await import('@kaddo/admin-server')
     }
