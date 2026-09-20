@@ -20,9 +20,11 @@ function isPortAvailable(port: number, host: string): Promise<boolean> {
 }
 
 function resolveStaticDir(): string | null {
-  // In the monorepo, the admin frontend dist is at ../../admin/dist relative to this file's package
   const __dirname = path.dirname(fileURLToPath(import.meta.url))
   const candidates = [
+    // Bundled inside CLI package (npm install)
+    path.resolve(__dirname, '..', 'admin-dist'),
+    // Monorepo development
     path.resolve(__dirname, '..', '..', 'admin', 'dist'),
     path.resolve(__dirname, '..', 'node_modules', '@kaddo', 'admin', 'dist'),
   ]

@@ -29,6 +29,7 @@
   },
   "files": [
     "dist",
+    "dist/admin-dist",
     "README.md",
     "LICENSE"
   ],
@@ -36,7 +37,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node -e \"const fs=require('fs');const s='../admin/dist',d='dist/admin-dist';if(fs.existsSync(s)){fs.cpSync(s,d,{recursive:true})}\"",
     "dev": "tsup --watch",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
