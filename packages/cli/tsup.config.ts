@@ -9,6 +9,7 @@ export default defineConfig([
     banner: { js: '#!/usr/bin/env node' },
     sourcemap: false,
     minify: false,
+    external: ['@kaddo/admin-server'],
   },
   {
     entry: ['src/core.ts'],

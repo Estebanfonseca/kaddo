@@ -133,12 +133,6 @@ importers:
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
-      '@kaddo/admin':
-        specifier: workspace:*
-        version: link:../admin
-      '@kaddo/admin-server':
-        specifier: workspace:*
-        version: link:../admin-server
       commander:
         specifier: ^12.1.0
         version: 12.1.0
