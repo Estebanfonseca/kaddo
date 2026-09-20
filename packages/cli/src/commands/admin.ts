@@ -22,8 +22,8 @@ function isPortAvailable(port: number, host: string): Promise<boolean> {
 function resolveStaticDir(): string | null {
   const __dirname = path.dirname(fileURLToPath(import.meta.url))
   const candidates = [
-    // Bundled inside CLI package (npm install)
-    path.resolve(__dirname, '..', 'admin-dist'),
+    // Bundled inside CLI dist (npm install)
+    path.resolve(__dirname, 'admin-dist'),
     // Monorepo development
     path.resolve(__dirname, '..', '..', 'admin', 'dist'),
     path.resolve(__dirname, '..', 'node_modules', '@kaddo', 'admin', 'dist'),
@@ -71,8 +71,20 @@ export async function runAdmin(opts: AdminOpts = {}) {
     process.exit(1)
   }
 
-  // Dynamic import to avoid bundling admin-server into CLI
-  const { createAdminServer, SQLiteAdminStorage } = await import('@kaddo/admin-server')
+  // Dynamic import — try bundled copy first, then monorepo package
+  let adminServer: { createAdminServer: any; SQLiteAdminStorage: any }
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
+    const bundled = path.resolve(__dirname, 'admin-server', 'index.js')
+    if (exists(bundled)) {
+      adminServer = await import(bundled)
+    } else {
+      adminServer = await import('@kaddo/admin-server')
+    }
+  } catch {
+    adminServer = await import('@kaddo/admin-server')
+  }
+  const { createAdminServer, SQLiteAdminStorage } = adminServer
 
   // Initialize storage
   const dbDir = join(dir, '.kaddo', 'admin')
