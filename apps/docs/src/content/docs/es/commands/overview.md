@@ -105,6 +105,7 @@ Comandos de apoyo:
 | `kaddo drift` | [Reporte de drift](/es/drift-report/): warnings detectados/resueltos con el tiempo |
 | `kaddo questions` | [Gate de preguntas abiertas](/es/open-questions/): decisiones bloqueantes antes del roadmap |
 | `kaddo adapters install codex` | Genera [`AGENTS.md`](/es/codex-adapter/) para que Codex entienda el flujo Kaddo |
+| `kaddo admin` | Lanza el [dashboard web admin local](/es/commands/admin/) |
 | `kaddo add <module>` | Instala un módulo opcional |
 
 Las [**habilidades**](/es/skills/) reutilizables estandarizan cómo los agentes hacen bien lo común

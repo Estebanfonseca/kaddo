@@ -1,6 +1,6 @@
 {
   "name": "@kaddo/cli",
-  "version": "3.68.0",
+  "version": "3.69.0",
   "description": "Knowledge Driven Development toolkit",
   "license": "MIT",
   "repository": {
@@ -20,6 +20,10 @@
   ],
   "type": "module",
   "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./core": "./dist/core.js"
+  },
   "bin": {
     "kaddo": "./dist/index.js"
   },
@@ -45,7 +49,10 @@
     "gray-matter": "^4.0.3",
     "minimatch": "^10.2.5",
     "yaml": "^2.4.2",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@kaddo/admin-server": "workspace:*",
+    "@kaddo/admin": "workspace:*",
+    "open": "^10.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

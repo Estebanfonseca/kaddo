@@ -1,0 +1,123 @@
+import { exists, join, cwd, ensureDir } from '../utils/fs.js'
+import { loadConfig } from '../core/config.js'
+import path from 'path'
+import { fileURLToPath } from 'node:url'
+import net from 'node:net'
+
+type AdminOpts = {
+  port?: number
+  host?: string
+  noOpen?: boolean
+}
+
+function isPortAvailable(port: number, host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+    server.once('error', () => resolve(false))
+    server.once('listening', () => { server.close(); resolve(true) })
+    server.listen(port, host)
+  })
+}
+
+function resolveStaticDir(): string | null {
+  // In the monorepo, the admin frontend dist is at ../../admin/dist relative to this file's package
+  const __dirname = path.dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    path.resolve(__dirname, '..', '..', 'admin', 'dist'),
+    path.resolve(__dirname, '..', 'node_modules', '@kaddo', 'admin', 'dist'),
+  ]
+  for (const c of candidates) {
+    if (exists(join(c, 'index.html'))) return c
+  }
+  return null
+}
+
+export async function runAdmin(opts: AdminOpts = {}) {
+  const dir = cwd()
+  const port = opts.port ?? 4173
+  const host = opts.host ?? '127.0.0.1'
+
+  const config = loadConfig(dir)
+  if (!config) {
+    console.log('')
+    console.log('Kaddo Admin could not start.')
+    console.log('')
+    console.log('No Kaddo project was detected in the current directory.')
+    console.log('')
+    console.log('Run:')
+    console.log('  kaddo init')
+    console.log('')
+    console.log('or execute this command from a Kaddo project.')
+    console.log('')
+    process.exit(1)
+  }
+
+  const available = await isPortAvailable(port, host)
+  if (!available) {
+    console.log('')
+    console.log(`Port ${port} is already in use.`)
+    console.log('')
+    console.log('Use:')
+    console.log(`  kaddo admin --port <port>`)
+    console.log('')
+    process.exit(1)
+  }
+
+  const staticDir = resolveStaticDir()
+  if (!staticDir) {
+    console.error('Admin frontend not built. Run `pnpm -r build` first.')
+    process.exit(1)
+  }
+
+  // Dynamic import to avoid bundling admin-server into CLI
+  const { createAdminServer, SQLiteAdminStorage } = await import('@kaddo/admin-server')
+
+  // Initialize storage
+  const dbDir = join(dir, '.kaddo', 'admin')
+  ensureDir(dbDir)
+  const dbPath = join(dbDir, 'admin.db')
+  const storage = new SQLiteAdminStorage(dbPath)
+  await storage.initialize()
+
+  const server = await createAdminServer({
+    projectDir: dir,
+    storage,
+    staticDir,
+    host,
+    port,
+  })
+
+  const address = await server.start()
+
+  console.log('')
+  console.log('Kaddo Admin')
+  console.log('')
+  console.log(`Project: ${config.project.name}`)
+  console.log(`Mode: local`)
+  console.log(`Address: ${address}`)
+  console.log('')
+  console.log(`Session: active`)
+  console.log(`Storage: SQLite`)
+  console.log(`Project source: Kaddo Core`)
+  console.log('')
+  console.log('Press Ctrl+C to stop.')
+  console.log('')
+
+  if (!opts.noOpen) {
+    try {
+      const { default: open } = await import('open')
+      await open(address)
+    } catch {}
+  }
+
+  const shutdown = async () => {
+    console.log('')
+    console.log('Shutting down...')
+    await server.stop()
+    console.log('Kaddo Admin stopped.')
+    process.exit(0)
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+}

@@ -1,0 +1,136 @@
+/* Kaddo Design System — Semantic + Domain tokens (VS-096) */
+
+:root {
+  /* Foundation */
+  --background: #ffffff;
+  --surface: #f8f9fa;
+  --surface-muted: #f1f3f5;
+  --foreground: #1a1a2e;
+  --foreground-muted: #6c757d;
+  --border: #dee2e6;
+  --border-strong: #adb5bd;
+  --primary: #4361ee;
+  --primary-foreground: #ffffff;
+  --success: #2d9f5c;
+  --warning: #e9a820;
+  --danger: #dc3545;
+  --info: #3b82f6;
+
+  /* Findings */
+  --finding-blocking: #dc3545;
+  --finding-warning: #e9a820;
+  --finding-fyi: #6c757d;
+
+  /* Work Items */
+  --work-item-draft: #6c757d;
+  --work-item-ready: #3b82f6;
+  --work-item-progress: #8b5cf6;
+  --work-item-blocked: #dc3545;
+  --work-item-completed: #2d9f5c;
+  --work-item-archived: #adb5bd;
+
+  /* Knowledge */
+  --knowledge-ready: #2d9f5c;
+  --knowledge-missing: #dc3545;
+  --knowledge-placeholder: #e9a820;
+  --knowledge-unknown: #6c757d;
+
+  /* Modules */
+  --module-core: #4361ee;
+  --module-module: #3b82f6;
+  --module-unavailable: #dc3545;
+
+  /* Readiness */
+  --readiness-ready: #2d9f5c;
+  --readiness-warning: #e9a820;
+  --readiness-blocked: #dc3545;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Spacing */
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0f0f23;
+    --surface: #1a1a2e;
+    --surface-muted: #16213e;
+    --foreground: #e8e8e8;
+    --foreground-muted: #a0a0b0;
+    --border: #2a2a3e;
+    --border-strong: #4a4a5e;
+    --primary: #6580f5;
+    --primary-foreground: #ffffff;
+    --success: #3cb371;
+    --warning: #f0b840;
+    --danger: #ef4444;
+    --info: #60a5fa;
+
+    --finding-blocking: #ef4444;
+    --finding-warning: #f0b840;
+    --finding-fyi: #a0a0b0;
+
+    --work-item-draft: #a0a0b0;
+    --work-item-ready: #60a5fa;
+    --work-item-progress: #a78bfa;
+    --work-item-blocked: #ef4444;
+    --work-item-completed: #3cb371;
+    --work-item-archived: #6a6a7e;
+
+    --knowledge-ready: #3cb371;
+    --knowledge-missing: #ef4444;
+    --knowledge-placeholder: #f0b840;
+    --knowledge-unknown: #a0a0b0;
+
+    --module-core: #6580f5;
+    --module-module: #60a5fa;
+    --module-unavailable: #ef4444;
+
+    --readiness-ready: #3cb371;
+    --readiness-warning: #f0b840;
+    --readiness-blocked: #ef4444;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #0f0f23;
+  --surface: #1a1a2e;
+  --surface-muted: #16213e;
+  --foreground: #e8e8e8;
+  --foreground-muted: #a0a0b0;
+  --border: #2a2a3e;
+  --border-strong: #4a4a5e;
+  --primary: #6580f5;
+  --primary-foreground: #ffffff;
+  --success: #3cb371;
+  --warning: #f0b840;
+  --danger: #ef4444;
+  --info: #60a5fa;
+
+  --finding-blocking: #ef4444;
+  --finding-warning: #f0b840;
+  --finding-fyi: #a0a0b0;
+
+  --work-item-draft: #a0a0b0;
+  --work-item-ready: #60a5fa;
+  --work-item-progress: #a78bfa;
+  --work-item-blocked: #ef4444;
+  --work-item-completed: #3cb371;
+  --work-item-archived: #6a6a7e;
+
+  --knowledge-ready: #3cb371;
+  --knowledge-missing: #ef4444;
+  --knowledge-placeholder: #f0b840;
+  --knowledge-unknown: #a0a0b0;
+
+  --module-core: #6580f5;
+  --module-module: #60a5fa;
+  --module-unavailable: #ef4444;
+
+  --readiness-ready: #3cb371;
+  --readiness-warning: #f0b840;
+  --readiness-blocked: #ef4444;
+}

@@ -29,6 +29,7 @@ import { runAdr } from './commands/adr.js'
 import { runTechOrganize } from './commands/tech.js'
 import { runAssetsStatus, runAssetsUpdate } from './commands/assets.js'
 import { runReady } from './commands/ready.js'
+import { runAdmin } from './commands/admin.js'
 
 // Single source of truth for the version: read it from package.json at runtime so the CLI
 // `--version` can never drift from the published package version. `../package.json` resolves
@@ -440,6 +441,16 @@ program
   .option('--group <name>', 'For `add agents`: business|product|tech|delivery|utilities. For `add skills`: delivery|tech|integration')
   .action((moduleName: string | undefined, opts: { all?: boolean; group?: string }) => {
     runAdd(moduleName ?? '', { all: opts.all, group: opts.group })
+  })
+
+program
+  .command('admin')
+  .description('Start Kaddo Admin — a local web interface for the project knowledge')
+  .option('--port <port>', 'Server port (default: 4173)', parseInt)
+  .option('--host <host>', 'Server host (default: 127.0.0.1)')
+  .option('--no-open', 'Do not open the browser automatically')
+  .action(async (opts: { port?: number; host?: string; open?: boolean }) => {
+    await runAdmin({ port: opts.port, host: opts.host, noOpen: opts.open === false })
   })
 
 program.parseAsync(process.argv).catch((err) => {

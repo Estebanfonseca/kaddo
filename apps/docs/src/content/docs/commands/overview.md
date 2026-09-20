@@ -105,6 +105,7 @@ Supporting commands:
 | `kaddo drift` | [Drift Trend Report](/drift-report/): warnings detected/resolved over time |
 | `kaddo questions` | [Open Questions Gate](/open-questions/): blocking decisions before the roadmap |
 | `kaddo adapters install codex` | Generate [`AGENTS.md`](/codex-adapter/) so Codex understands the Kaddo flow |
+| `kaddo admin` | Launch the local [web admin dashboard](/commands/admin/) |
 | `kaddo add <module>` | Install an optional module |
 
 Reusable [**skills**](/skills/) standardize how agents do common things well — install them with
