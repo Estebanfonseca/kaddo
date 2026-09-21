@@ -1,0 +1,6 @@
+project:
+  name: kaddo-admin-e2e
+  state: pre-ai
+  structure: multirepo
+team:
+  size: small
