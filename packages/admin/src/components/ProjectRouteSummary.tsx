@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { presentRoute } from '../lib/presentation'
 
 type Step = { id: string; label: string; status: string }
 
@@ -22,6 +23,7 @@ const statusColor: Record<string, string> = {
 
 export function ProjectRouteSummary({ completed, total, progressPercent, steps }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const route = presentRoute(completed, total)
 
   return (
     <div style={{
@@ -33,6 +35,7 @@ export function ProjectRouteSummary({ completed, total, progressPercent, steps }
       <button
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
+        aria-label={`Project Route progress: ${completed} of ${total} steps completed`}
         style={{
           display: 'flex', alignItems: 'center', gap: 12, width: '100%',
           border: 'none', background: 'none', cursor: 'pointer', padding: 0,
@@ -42,7 +45,14 @@ export function ProjectRouteSummary({ completed, total, progressPercent, steps }
         <span style={{ fontSize: 12, color: 'var(--foreground-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 }}>
           Project Route
         </span>
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-muted)', overflow: 'hidden' }}>
+        <div
+          role="progressbar"
+          aria-valuenow={completed}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-label={`${completed} of ${total} steps completed`}
+          style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-muted)', overflow: 'hidden' }}
+        >
           <div style={{
             width: `${progressPercent}%`, height: '100%', borderRadius: 3,
             background: progressPercent === 100 ? 'var(--success)' : 'var(--primary)',
@@ -56,6 +66,10 @@ export function ProjectRouteSummary({ completed, total, progressPercent, steps }
           ▼
         </span>
       </button>
+
+      <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 4, paddingLeft: 0 }}>
+        {route.label}
+      </div>
 
       {expanded && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 4 }}>

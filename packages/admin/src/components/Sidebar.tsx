@@ -24,7 +24,8 @@ export function Sidebar({ projectName }: { projectName: string }) {
     }}>
       <div style={{ padding: '20px 16px 16px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>Kaddo Admin</div>
-        <div className="font-mono" style={{ fontSize: 12, color: 'var(--foreground-muted)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10 }}>Project</div>
+        <div className="font-mono" style={{ fontSize: 12, color: 'var(--foreground-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {projectName}
         </div>
       </div>

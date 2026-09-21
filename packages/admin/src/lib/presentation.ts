@@ -13,6 +13,18 @@ export type NextActionPresentation = {
   command?: string
 }
 
+export type FindingsPresentation = {
+  total: number
+  label: string
+  tone: Tone
+}
+
+export type RoutePresentation = {
+  completed: number
+  total: number
+  label: string
+}
+
 const readinessMap: Record<string, StatusPresentation> = {
   'delivery-completed': { label: 'Delivery completed', tone: 'success' },
   'delivery-completed-release-blocked': { label: 'Delivery completed', tone: 'warning', description: 'Release blocked' },
@@ -66,6 +78,28 @@ export function presentWorkItemsSummary(byState: Record<string, number>, total: 
   return parts.join(' · ')
 }
 
+export function presentModulesSummary(total: number): string {
+  if (total === 0) return 'No modules registered'
+  return 'Registered'
+}
+
+export function presentFindingsSummary(blocking: number, warning: number, fyi: number): FindingsPresentation {
+  const total = blocking + warning + fyi
+  if (total === 0) return { total: 0, label: 'No findings', tone: 'success' }
+
+  const parts: string[] = []
+  if (blocking > 0) parts.push(`${blocking} blocking`)
+  if (warning > 0) parts.push(`${warning} warning${warning > 1 ? 's' : ''}`)
+  if (fyi > 0) parts.push(`${fyi} FYI`)
+
+  const tone: Tone = blocking > 0 ? 'danger' : warning > 0 ? 'warning' : 'info'
+  return { total, label: parts.join(' · '), tone }
+}
+
+export function presentRoute(completed: number, total: number): RoutePresentation {
+  return { completed, total, label: 'Overall Kaddo workflow coverage' }
+}
+
 export function presentNextAction(
   readiness: { overall: string; recommendedNextStep: { label: string; command?: string } },
 ): NextActionPresentation | null {
@@ -74,14 +108,20 @@ export function presentNextAction(
 
   const agentMatch = recommendedNextStep.label.match(/(?:Use |run )?(\S+-agent)/i)
   const agent = agentMatch?.[1]
-  const title = recommendedNextStep.label.replace(/^Use \S+-agent to /i, '').replace(/\b\w/, (c) => c.toUpperCase())
 
-  return {
-    title,
-    agent,
-    command: recommendedNextStep.command,
-    description: recommendedNextStep.label,
+  let title = recommendedNextStep.label
+  if (agent) {
+    title = title.replace(/^Use \S+-agent to /i, '')
   }
+  title = title.replace(/\(.*?\)\s*\.?$/, '').trim()
+  title = title.replace(/\b\w/, (c) => c.toUpperCase())
+  if (title.endsWith('.')) title = title.slice(0, -1)
+
+  const description = agent
+    ? `Use ${agent} to ${title.charAt(0).toLowerCase()}${title.slice(1)}.`
+    : undefined
+
+  return { title, description, agent, command: recommendedNextStep.command }
 }
 
 export function presentRouteAttention(steps: { status: string }[]): { label: string; tone: Tone } | null {

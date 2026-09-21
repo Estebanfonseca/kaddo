@@ -1,14 +1,20 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { ReadinessBadge } from '../components/ReadinessBadge'
-import { KnowledgeStatus } from '../components/KnowledgeStatus'
+import { KnowledgeRow } from '../components/KnowledgeRow'
 import { ModuleBadge } from '../components/ModuleBadge'
 import { EmptyState } from '../components/EmptyState'
 import { NextAction } from '../components/NextAction'
 import { SummaryCard } from '../components/SummaryCard'
 import { ProjectRouteSummary } from '../components/ProjectRouteSummary'
 import { FindingSummary } from '../components/FindingSummary'
-import { presentStructure, presentKnowledgeCount, presentWorkItemsSummary } from '../lib/presentation'
+import {
+  presentStructure,
+  presentKnowledgeCount,
+  presentWorkItemsSummary,
+  presentModulesSummary,
+  presentFindingsSummary,
+} from '../lib/presentation'
 
 function Skeleton() {
   return (
@@ -64,6 +70,7 @@ export function Overview() {
 
   const { project, knowledge, workItems, modules, readiness, route, findings } = data
   const knowledgeCount = presentKnowledgeCount(knowledge.layers)
+  const findingsPresentation = presentFindingsSummary(findings.blocking, findings.warning, findings.fyi)
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto' }}>
@@ -110,12 +117,12 @@ export function Overview() {
         <SummaryCard
           title="Modules"
           value={modules.modules.length}
-          subtitle="Registered"
+          subtitle={presentModulesSummary(modules.modules.length)}
         />
         <SummaryCard
           title="Findings"
-          value={findings.blocking + findings.warning + findings.fyi}
-          subtitle={findings.blocking > 0 ? `${findings.blocking} blocking` : 'No blockers'}
+          value={findingsPresentation.total}
+          subtitle={findingsPresentation.label}
         />
       </div>
 
@@ -139,20 +146,16 @@ export function Overview() {
         />
       </div>
 
-      {/* Knowledge layers */}
+      {/* Knowledge layers + Modules */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
         <SectionCard title="Knowledge">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {knowledge.layers.map((l) => (
-              <div key={l.layer} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
-                <span>{l.layer}</span>
-                <KnowledgeStatus status={l.status} />
-              </div>
+              <KnowledgeRow key={l.layer} layer={l.layer} status={l.status} />
             ))}
           </div>
         </SectionCard>
 
-        {/* Modules */}
         {modules.modules.length > 0 && (
           <SectionCard title="Modules">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
