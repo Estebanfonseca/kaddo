@@ -52,6 +52,34 @@ export function presentReadiness(canonical: string, nextStep?: string): StatusPr
   return { label: humanize(canonical), tone: 'neutral' }
 }
 
+/**
+ * Whether a sidebar nav item is active for the current route. Derived purely from the router
+ * path — the root item matches its own path plus any nested child (`/work-items/WI-001`), while
+ * `/overview` matches only itself so it never stays active on other sections.
+ */
+export function isNavItemActive(currentPath: string, itemPath: string): boolean {
+  if (currentPath === itemPath) return true
+  if (itemPath === '/overview') return false
+  return currentPath.startsWith(itemPath + '/')
+}
+
+const workItemTypeLabels: Record<string, string> = {
+  bugfix: 'Bug fix',
+  feature: 'Feature',
+  hotfix: 'Hotfix',
+  spike: 'Spike',
+  chore: 'Chore',
+  maintenance: 'Maintenance',
+  refactor: 'Refactor',
+  docs: 'Docs',
+}
+
+/** Human-readable Work Item type. Canonical value stays available upstream. */
+export function presentWorkItemType(type: string | null | undefined): string {
+  if (!type) return 'Unknown'
+  return workItemTypeLabels[type] ?? humanize(type)
+}
+
 export function humanize(slug: string): string {
   return slug
     .replace(/[-_]/g, ' ')

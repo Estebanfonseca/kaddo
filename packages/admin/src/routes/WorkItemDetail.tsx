@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import type { WorkItemDetail as WorkItemDetailData } from '../lib/api'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { WorkItemStatus } from '../components/WorkItemStatus'
-import { DeliveryStatus } from '../components/DeliveryStatus'
+import { DeliveryStatusSummary } from '../components/DeliveryStatusSummary'
 import { Section, Field } from '../components/Section'
 import { ScopeConfidence } from '../components/ScopeConfidence'
 import { ModuleCoverage } from '../components/ModuleCoverage'
@@ -12,7 +12,8 @@ import { ImpactAnalysis } from '../components/ImpactAnalysis'
 import { AcceptanceCriteria } from '../components/AcceptanceCriteria'
 import { ImplementationEvidence } from '../components/ImplementationEvidence'
 import { ReleaseGates } from '../components/ReleaseGates'
-import { humanize } from '../lib/presentation'
+import { ArtifactPath } from '../components/ArtifactPath'
+import { humanize, presentWorkItemType } from '../lib/presentation'
 
 function Skeleton() {
   return (
@@ -20,15 +21,6 @@ function Skeleton() {
       <div style={{ height: 32, width: 320, background: 'var(--surface-muted)', borderRadius: 'var(--radius)', marginBottom: 16, animation: 'pulse 1.5s ease-in-out infinite' }} />
       <div style={{ height: 240, background: 'var(--surface-muted)', borderRadius: 'var(--radius)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       <style>{`@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.5 } }`}</style>
-    </div>
-  )
-}
-
-function DeliveryCell({ label, status }: { label: string; status: string | null }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--foreground-muted)', marginBottom: 6 }}>{label}</div>
-      <DeliveryStatus status={status} fallback="Not assessed" />
     </div>
   )
 }
@@ -97,13 +89,13 @@ export function WorkItemDetail() {
         </div>
       </div>
 
-      {/* Delivery status trio */}
+      {/* Delivery status trio — independent dimensions, only when the modern model records them */}
       {hasDelivery && (
-        <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 20px' }}>
-          <DeliveryCell label="Implementation" status={wi.implementationStatus} />
-          <DeliveryCell label="Validation" status={wi.validationStatus} />
-          <DeliveryCell label="Release" status={wi.releaseStatus} />
-        </div>
+        <DeliveryStatusSummary
+          implementationStatus={wi.implementationStatus}
+          validationStatus={wi.validationStatus}
+          releaseStatus={wi.releaseStatus}
+        />
       )}
 
       {/* Delivery ≠ release readiness note */}
@@ -173,7 +165,7 @@ export function WorkItemDetail() {
 
       {/* Acceptance criteria */}
       {wi.acceptanceCriteria.length > 0 && (
-        <Section title="Acceptance criteria"><AcceptanceCriteria criteria={wi.acceptanceCriteria} /></Section>
+        <Section title="Acceptance criteria"><AcceptanceCriteria criteria={wi.acceptanceCriteria} completed={wi.status === 'completed'} /></Section>
       )}
 
       {/* Decisions */}
@@ -241,15 +233,15 @@ export function WorkItemDetail() {
 
       {/* Details */}
       <Section title="Details">
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 16px', fontSize: 13 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '120px minmax(0, 1fr)', gap: '10px 16px', fontSize: 13, alignItems: 'baseline' }}>
           <span style={{ color: 'var(--foreground-muted)' }}>ID</span>
           <span className="font-mono">{wi.id}</span>
           <span style={{ color: 'var(--foreground-muted)' }}>Type</span>
-          <span>{humanize(wi.type || 'unknown')}</span>
+          <span>{presentWorkItemType(wi.type)}</span>
           <span style={{ color: 'var(--foreground-muted)' }}>Status</span>
           <span><WorkItemStatus status={wi.status} /></span>
           <span style={{ color: 'var(--foreground-muted)' }}>Path</span>
-          <span className="font-mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{wi.path}</span>
+          <ArtifactPath path={wi.path} copyable />
           <span style={{ color: 'var(--foreground-muted)' }}>Source</span>
           <span>{wi.source.type === 'manual' || wi.source.type === 'unknown' ? 'Kaddo project' : humanize(wi.source.type)}</span>
         </div>

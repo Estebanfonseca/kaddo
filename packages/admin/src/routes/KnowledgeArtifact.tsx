@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { KnowledgeBreadcrumbs } from '../components/KnowledgeBreadcrumbs'
 import { KnowledgeArtifactStatus } from '../components/KnowledgeArtifactStatus'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import { ArtifactPath } from '../components/ArtifactPath'
 import { humanize } from '../lib/presentation'
 
 function Skeleton() {
@@ -81,8 +82,8 @@ export function KnowledgeArtifact() {
           <span style={{ color: 'var(--border-strong)' }}>&middot;</span>
           <KnowledgeArtifactStatus status={data.status} />
         </div>
-        <div className="font-mono" style={{ fontSize: 12, color: 'var(--foreground-muted)', marginTop: 6 }}>
-          {data.path}
+        <div style={{ marginTop: 6 }}>
+          <ArtifactPath path={data.path} />
         </div>
       </div>
 
@@ -125,7 +126,7 @@ export function KnowledgeArtifact() {
           <span style={{ color: 'var(--foreground-muted)' }}>Layer</span>
           <span>{humanize(data.layer)}</span>
           <span style={{ color: 'var(--foreground-muted)' }}>Path</span>
-          <span className="font-mono" style={{ fontSize: 12 }}>{data.path}</span>
+          <ArtifactPath path={data.path} />
           <span style={{ color: 'var(--foreground-muted)' }}>Status</span>
           <KnowledgeArtifactStatus status={data.status} />
           {data.type && <>

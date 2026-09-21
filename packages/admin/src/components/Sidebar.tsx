@@ -1,4 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
+import { isNavItemActive } from '../lib/presentation'
 
 type NavItem = { label: string; path: string; icon: string; disabled?: boolean }
 
@@ -32,7 +33,7 @@ export function Sidebar({ projectName }: { projectName: string }) {
 
       <nav style={{ padding: '8px 0', flex: 1 }}>
         {navItems.map((item) => {
-          const active = currentPath === item.path || (item.path !== '/overview' && currentPath.startsWith(item.path + '/'))
+          const active = isNavItemActive(currentPath, item.path)
           return (
             <button
               key={item.path}

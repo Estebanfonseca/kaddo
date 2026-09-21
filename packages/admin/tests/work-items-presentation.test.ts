@@ -6,6 +6,8 @@ import {
   presentScopeConfidence,
   isPrimaryCoverage,
   toneToVariant,
+  isNavItemActive,
+  presentWorkItemType,
 } from '../src/lib/presentation'
 
 describe('presentDeliveryStatus', () => {
@@ -63,5 +65,37 @@ describe('toneToVariant', () => {
   it('maps neutral to muted, passes others through', () => {
     expect(toneToVariant('neutral')).toBe('muted')
     expect(toneToVariant('success')).toBe('success')
+  })
+})
+
+describe('isNavItemActive (route-derived sidebar state)', () => {
+  it('overview is active only on its own route', () => {
+    expect(isNavItemActive('/overview', '/overview')).toBe(true)
+    expect(isNavItemActive('/knowledge', '/overview')).toBe(false)
+    expect(isNavItemActive('/work-items/WI-001', '/overview')).toBe(false)
+  })
+
+  it('section items stay active on nested routes', () => {
+    expect(isNavItemActive('/work-items', '/work-items')).toBe(true)
+    expect(isNavItemActive('/work-items/WI-001', '/work-items')).toBe(true)
+    expect(isNavItemActive('/knowledge', '/knowledge')).toBe(true)
+    expect(isNavItemActive('/knowledge/product/capabilities', '/knowledge')).toBe(true)
+  })
+
+  it('a section item is not active on a different section', () => {
+    expect(isNavItemActive('/knowledge/product', '/work-items')).toBe(false)
+    expect(isNavItemActive('/work-items/WI-001', '/knowledge')).toBe(false)
+  })
+})
+
+describe('presentWorkItemType', () => {
+  it('maps canonical types to human-readable labels', () => {
+    expect(presentWorkItemType('bugfix')).toBe('Bug fix')
+    expect(presentWorkItemType('feature')).toBe('Feature')
+    expect(presentWorkItemType('maintenance')).toBe('Maintenance')
+  })
+  it('falls back to humanized text for unknown types, never crashing', () => {
+    expect(presentWorkItemType('some-future-type')).toBe('Some Future Type')
+    expect(presentWorkItemType(null)).toBe('Unknown')
   })
 })
