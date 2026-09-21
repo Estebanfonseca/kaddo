@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import { api } from '../lib/api'
 import type { WorkItemListItem } from '../lib/api'
 import { WorkItemRow } from '../components/WorkItemRow'
@@ -68,6 +69,7 @@ const inputStyle = {
 
 export function WorkItems() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [moduleFilter, setModuleFilter] = useState('all')
@@ -101,7 +103,14 @@ export function WorkItems() {
         <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--foreground)', margin: '0 0 8px' }}>No Work Items</h2>
         <p style={{ fontSize: 14 }}>No Work Items have been defined for this project yet.</p>
-        <p style={{ fontSize: 13, marginTop: 8 }}>The next recommended action is available in Overview.</p>
+        <div style={{ marginTop: 16 }}>
+          <button
+            onClick={() => router.navigate({ to: '/work-items/new' })}
+            style={{ padding: '8px 16px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+          >
+            + Create Work Item
+          </button>
+        </div>
       </div>
     )
   }
@@ -128,13 +137,21 @@ export function WorkItems() {
           <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Work Items</h2>
           <p style={{ fontSize: 14, color: 'var(--foreground-muted)', margin: 0 }}>Explore the work defined and delivered through Kaddo.</p>
         </div>
-        <button
-          onClick={() => queryClient.invalidateQueries({ queryKey: ['work-items'] })}
-          aria-label="Refresh work items"
-          style={{ ...inputStyle, color: 'var(--foreground-muted)', cursor: 'pointer', padding: '8px 14px' }}
-        >
-          ↻ Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['work-items'] })}
+            aria-label="Refresh work items"
+            style={{ ...inputStyle, color: 'var(--foreground-muted)', cursor: 'pointer', padding: '8px 14px' }}
+          >
+            ↻ Refresh
+          </button>
+          <button
+            onClick={() => router.navigate({ to: '/work-items/new' })}
+            style={{ padding: '8px 16px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+          >
+            + Create Work Item
+          </button>
+        </div>
       </div>
 
       {/* Count tabs */}

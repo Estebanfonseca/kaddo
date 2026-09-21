@@ -10,10 +10,17 @@ import {
   getWorkItems as coreGetWorkItems,
   getWorkItem as coreGetWorkItem,
   WorkItemNotFoundError,
+  createWorkItem as coreCreateWorkItem,
+  updateWorkItem as coreUpdateWorkItem,
+  getWorkItemForEdit as coreGetWorkItemForEdit,
+  validateWorkItem as coreValidateWorkItem,
+  transitionWorkItem as coreTransitionWorkItem,
+  WorkItemWriteError,
   exists,
   join,
   readFile,
   type WorkItemFilters,
+  type WorkItemInput as CoreWorkItemInput,
 } from '@kaddo/cli/core'
 import type {
   ProjectOverview,
@@ -28,6 +35,10 @@ import type {
   KnowledgeArtifactDetail,
   WorkItemsList,
   WorkItemDetail,
+  WorkItemEditModel,
+  WorkItemInput,
+  ValidationResult,
+  WorkItemWriteResult,
 } from './contracts/schemas.js'
 
 export function getProjectSummary(dir: string): ProjectSummary {
@@ -89,6 +100,60 @@ export function getWorkItemDetail(dir: string, workItemId: string): WorkItemDeta
     }
     throw err
   }
+}
+
+function assertValidWorkItemId(workItemId: string): void {
+  if (
+    !workItemId ||
+    workItemId.includes('..') ||
+    workItemId.includes('/') ||
+    workItemId.includes('\\') ||
+    workItemId.startsWith('.')
+  ) {
+    throw new CoreError('INVALID_WORK_ITEM_ID', 'Invalid Work Item identifier.')
+  }
+}
+
+function mapWriteError(err: unknown): never {
+  if (err instanceof WorkItemWriteError) throw new CoreError(err.code, err.message)
+  throw err as Error
+}
+
+export function createWorkItemAdmin(dir: string, body: { intent: string; type: string }): WorkItemWriteResult {
+  try {
+    const res = coreCreateWorkItem(dir, { intent: body.intent, type: body.type })
+    return { id: res.id, path: res.path, revision: res.revision, status: 'draft' }
+  } catch (err) { mapWriteError(err) }
+}
+
+export function getWorkItemEdit(dir: string, workItemId: string): WorkItemEditModel {
+  assertValidWorkItemId(workItemId)
+  try {
+    return coreGetWorkItemForEdit(dir, workItemId) as WorkItemEditModel
+  } catch (err) { mapWriteError(err) }
+}
+
+export function updateWorkItemAdmin(dir: string, workItemId: string, body: { model: WorkItemInput; expectedRevision: string }): WorkItemWriteResult {
+  assertValidWorkItemId(workItemId)
+  try {
+    const res = coreUpdateWorkItem(dir, workItemId, body.model as CoreWorkItemInput, body.expectedRevision)
+    return { id: workItemId, path: res.path, revision: res.revision }
+  } catch (err) { mapWriteError(err) }
+}
+
+export function validateWorkItemAdmin(dir: string, workItemId: string): ValidationResult {
+  assertValidWorkItemId(workItemId)
+  try {
+    return coreValidateWorkItem(dir, workItemId)
+  } catch (err) { mapWriteError(err) }
+}
+
+export function transitionWorkItemAdmin(dir: string, workItemId: string, to: 'ready' | 'draft', expectedRevision: string): WorkItemWriteResult {
+  assertValidWorkItemId(workItemId)
+  try {
+    const res = coreTransitionWorkItem(dir, workItemId, to, expectedRevision)
+    return { id: workItemId, path: res.path, revision: res.revision, status: res.status }
+  } catch (err) { mapWriteError(err) }
 }
 
 export function getModules(dir: string): ModuleSummary {

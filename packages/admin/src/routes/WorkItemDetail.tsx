@@ -71,13 +71,23 @@ export function WorkItemDetail() {
     <div style={{ padding: '24px 32px', maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <Breadcrumbs crumbs={[{ label: 'Work Items', path: '/work-items' }, { label: wi.id }]} />
-        <button
-          onClick={() => queryClient.invalidateQueries({ queryKey: ['work-item', workItemId] })}
-          aria-label="Refresh work item"
-          style={{ padding: '6px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--foreground-muted)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
-        >
-          ↻ Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['work-item', workItemId] })}
+            aria-label="Refresh work item"
+            style={{ padding: '6px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--foreground-muted)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
+          >
+            ↻ Refresh
+          </button>
+          {(wi.status === 'draft' || wi.status === 'ready') && (
+            <button
+              onClick={() => router.navigate({ to: '/work-items/$workItemId/edit', params: { workItemId } })}
+              style={{ padding: '6px 12px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+            >
+              Edit
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Header */}

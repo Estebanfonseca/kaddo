@@ -16,9 +16,33 @@ import {
   getKnowledgeArtifactDetail,
   getWorkItemsList,
   getWorkItemDetail,
+  createWorkItemAdmin,
+  getWorkItemEdit,
+  updateWorkItemAdmin,
+  validateWorkItemAdmin,
+  transitionWorkItemAdmin,
   CoreError,
 } from './core-adapter.js'
+import {
+  WorkItemCreateSchema,
+  WorkItemUpdateSchema,
+  WorkItemTransitionSchema,
+} from './contracts/schemas.js'
 import type { AdminStorage } from './storage/admin-storage.js'
+
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+function statusForCode(code: string): number {
+  switch (code) {
+    case 'WORK_ITEM_NOT_FOUND': return 404
+    case 'WORK_ITEM_CONFLICT':
+    case 'WORK_ITEM_NOT_EDITABLE': return 409
+    case 'INVALID_INPUT':
+    case 'INVALID_WORK_ITEM_ID':
+    case 'INVALID_TRANSITION': return 400
+    default: return 500
+  }
+}
 
 export type AdminServerOptions = {
   projectDir: string
@@ -59,6 +83,19 @@ export async function createAdminServer(opts: AdminServerOptions) {
     const cookieSession = request.cookies['kaddo-session']
     if (!sessionManager.validateSession(cookieSession)) {
       reply.code(401).send({ error: { code: 'SESSION_INVALID', message: 'Invalid or expired session.' } })
+    }
+  })
+
+  // CSRF / origin protection for state-changing requests (VS-099).
+  // Combined with the SameSite=strict session cookie, requiring a same-origin Origin header on
+  // every write blocks cross-site request forgery. The browser sends Origin on POST/PUT/PATCH/DELETE.
+  const allowedOrigin = `http://${host}:${port}`
+  app.addHook('onRequest', async (request, reply) => {
+    if (!request.url.startsWith('/api/')) return
+    if (!WRITE_METHODS.has(request.method)) return
+    const origin = request.headers.origin
+    if (!origin || origin !== allowedOrigin) {
+      reply.code(403).send({ error: { code: 'FORBIDDEN_ORIGIN', message: 'Cross-origin write requests are not allowed.' } })
     }
   })
 
@@ -107,6 +144,51 @@ export async function createAdminServer(opts: AdminServerOptions) {
       }
     },
   )
+  // Write operations (VS-099). Each maps CoreError codes to the right HTTP status; a failed write
+  // never returns a partial artifact (Core writes atomically).
+  const writeHandler = <T>(reply: import('fastify').FastifyReply, fn: () => T) => {
+    try {
+      return fn()
+    } catch (err) {
+      if (err instanceof CoreError) {
+        return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } })
+      }
+      throw err
+    }
+  }
+
+  app.post('/api/v1/admin/work-items', async (request, reply) => {
+    const parsed = WorkItemCreateSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'Intent and type are required.' } })
+    return writeHandler(reply, () => createWorkItemAdmin(projectDir, parsed.data))
+  })
+
+  app.get<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/edit', async (request, reply) => {
+    return writeHandler(reply, () => getWorkItemEdit(projectDir, request.params.workItemId))
+  })
+
+  app.put<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId', async (request, reply) => {
+    const parsed = WorkItemUpdateSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'A Work Item model and expectedRevision are required.' } })
+    return writeHandler(reply, () => updateWorkItemAdmin(projectDir, request.params.workItemId, parsed.data))
+  })
+
+  app.post<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/validate', async (request, reply) => {
+    return writeHandler(reply, () => validateWorkItemAdmin(projectDir, request.params.workItemId))
+  })
+
+  app.post<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/transitions/ready', async (request, reply) => {
+    const parsed = WorkItemTransitionSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'expectedRevision is required.' } })
+    return writeHandler(reply, () => transitionWorkItemAdmin(projectDir, request.params.workItemId, 'ready', parsed.data.expectedRevision))
+  })
+
+  app.post<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/transitions/draft', async (request, reply) => {
+    const parsed = WorkItemTransitionSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'expectedRevision is required.' } })
+    return writeHandler(reply, () => transitionWorkItemAdmin(projectDir, request.params.workItemId, 'draft', parsed.data.expectedRevision))
+  })
+
   app.get<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId', async (request, reply) => {
     try {
       return getWorkItemDetail(projectDir, request.params.workItemId)

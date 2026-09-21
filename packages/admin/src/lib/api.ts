@@ -1,10 +1,37 @@
 const BASE = '/api/v1/admin'
 
+export class ApiError extends Error {
+  code: string
+  status: number
+  constructor(code: string, message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.status = status
+  }
+}
+
 async function fetchApi<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { credentials: 'include' })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.error?.message ?? `Request failed: ${res.status}`)
+    throw new ApiError(body?.error?.code ?? 'ERROR', body?.error?.message ?? `Request failed: ${res.status}`, res.status)
+  }
+  return res.json()
+}
+
+async function mutateApi<T>(path: string, method: 'POST' | 'PUT', body?: unknown): Promise<T> {
+  // Only send a JSON content-type when there is a body — Fastify rejects an empty JSON body (400).
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    credentials: 'include',
+    ...(body === undefined
+      ? {}
+      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null)
+    throw new ApiError(errBody?.error?.code ?? 'ERROR', errBody?.error?.message ?? `Request failed: ${res.status}`, res.status)
   }
   return res.json()
 }
@@ -126,6 +153,39 @@ export type WorkItemDetail = WorkItemListItem & {
   path: string
 }
 
+export type WorkItemInput = {
+  title: string
+  type: string
+  summary?: string
+  actor?: string
+  outcome?: string
+  currentBehavior?: string
+  targetBehavior?: string
+  entryPoints?: string
+  endToEndFlow?: string
+  scopeConfidence: { level: string; reasons: string[] } | null
+  scopeUnknowns: string[]
+  affectedModules: string[]
+  moduleCoverage: CoverageEntry[]
+  impactAnalysis: ImpactEntry[]
+  acceptanceCriteria: AcceptanceCriterion[]
+  decisions: string[]
+  relatedKnowledge: string[]
+}
+
+export type WorkItemEditModel = WorkItemInput & {
+  id: string
+  status: string
+  revision: string
+  path: string
+  editable: boolean
+  editableReason?: string
+}
+
+export type ValidationFinding = { level: 'blocking' | 'warning' | 'fyi'; message: string }
+export type ValidationResult = { findings: ValidationFinding[]; canMarkReady: boolean }
+export type WorkItemWriteResult = { id: string; path: string; revision: string; status?: string }
+
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
 function toQuery(filters: WorkItemFilters): string {
@@ -150,4 +210,14 @@ export const api = {
   getKnowledgeArtifact: (artifactId: string) => fetchApi<KnowledgeArtifactDetail>(`/knowledge/artifact/${encodeURIComponent(artifactId)}`),
   getWorkItemsList: (filters: WorkItemFilters = {}) => fetchApi<WorkItemsList>(`/work-items${toQuery(filters)}`),
   getWorkItem: (workItemId: string) => fetchApi<WorkItemDetail>(`/work-items/${encodeURIComponent(workItemId)}`),
+  // Writes (VS-099)
+  createWorkItem: (intent: string, type: string) => mutateApi<WorkItemWriteResult>('/work-items', 'POST', { intent, type }),
+  getWorkItemEdit: (workItemId: string) => fetchApi<WorkItemEditModel>(`/work-items/${encodeURIComponent(workItemId)}/edit`),
+  updateWorkItem: (workItemId: string, model: WorkItemInput, expectedRevision: string) =>
+    mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}`, 'PUT', { model, expectedRevision }),
+  validateWorkItem: (workItemId: string) => mutateApi<ValidationResult>(`/work-items/${encodeURIComponent(workItemId)}/validate`, 'POST'),
+  transitionReady: (workItemId: string, expectedRevision: string) =>
+    mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/transitions/ready`, 'POST', { expectedRevision }),
+  transitionDraft: (workItemId: string, expectedRevision: string) =>
+    mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/transitions/draft`, 'POST', { expectedRevision }),
 }

@@ -31,4 +31,20 @@ export {
   type LinkedDecision,
   type LinkedKnowledge,
 } from './core/work-items.js'
+export {
+  createWorkItem,
+  updateWorkItem,
+  getWorkItemForEdit,
+  validateWorkItem,
+  transitionWorkItem,
+  WorkItemWriteError,
+  type WorkItemInput,
+  type WorkItemEditModel,
+  type WorkItemCoverageInput,
+  type WorkItemImpactInput,
+  type WorkItemCriterionInput,
+  type ValidationFinding,
+  type ValidationResult,
+  type WriteErrorCode,
+} from './core/work-item-write.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'

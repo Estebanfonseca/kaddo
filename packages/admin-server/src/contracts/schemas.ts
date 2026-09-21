@@ -211,6 +211,63 @@ export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
   path: z.string(),
 })
 
+// --- Work Item writes (VS-099) -----------------------------------------------
+
+export const WorkItemInputSchema = z.object({
+  title: z.string(),
+  type: z.string(),
+  summary: z.string().optional(),
+  actor: z.string().optional(),
+  outcome: z.string().optional(),
+  currentBehavior: z.string().optional(),
+  targetBehavior: z.string().optional(),
+  entryPoints: z.string().optional(),
+  endToEndFlow: z.string().optional(),
+  scopeConfidence: z.object({ level: z.string(), reasons: z.array(z.string()) }).nullable(),
+  scopeUnknowns: z.array(z.string()),
+  affectedModules: z.array(z.string()),
+  moduleCoverage: z.array(z.object({ id: z.string(), status: z.string(), reason: z.string().optional() })),
+  impactAnalysis: z.array(z.object({ surface: z.string(), status: z.string(), reason: z.string().optional(), question: z.string().optional() })),
+  acceptanceCriteria: z.array(z.object({ text: z.string(), checked: z.boolean().nullable() })),
+  decisions: z.array(z.string()),
+  relatedKnowledge: z.array(z.string()),
+})
+
+export const WorkItemCreateSchema = z.object({
+  intent: z.string().min(1),
+  type: z.string().min(1),
+})
+
+export const WorkItemUpdateSchema = z.object({
+  model: WorkItemInputSchema,
+  expectedRevision: z.string().min(1),
+})
+
+export const WorkItemTransitionSchema = z.object({
+  expectedRevision: z.string().min(1),
+})
+
+export const WorkItemEditModelSchema = WorkItemInputSchema.extend({
+  id: z.string(),
+  status: z.string(),
+  revision: z.string(),
+  path: z.string(),
+  editable: z.boolean(),
+  editableReason: z.string().optional(),
+})
+
+export const ValidationResultSchema = z.object({
+  findings: z.array(z.object({ level: z.enum(['blocking', 'warning', 'fyi']), message: z.string() })),
+  canMarkReady: z.boolean(),
+})
+
+export const WorkItemWriteResultSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  revision: z.string(),
+  status: z.string().optional(),
+})
+
 export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
@@ -231,4 +288,8 @@ export type KnowledgeArtifactDetail = z.infer<typeof KnowledgeArtifactDetailSche
 export type WorkItemsList = z.infer<typeof WorkItemsListSchema>
 export type WorkItemListItem = z.infer<typeof WorkItemListItemSchema>
 export type WorkItemDetail = z.infer<typeof WorkItemDetailSchema>
+export type WorkItemInput = z.infer<typeof WorkItemInputSchema>
+export type WorkItemEditModel = z.infer<typeof WorkItemEditModelSchema>
+export type ValidationResult = z.infer<typeof ValidationResultSchema>
+export type WorkItemWriteResult = z.infer<typeof WorkItemWriteResultSchema>
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>
