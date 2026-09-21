@@ -1,14 +1,16 @@
 import { StatusBadge } from './StatusBadge'
+import { presentReadiness } from '../lib/presentation'
 
 type Props = { status: string }
 
-function readinessVariant(status: string): 'success' | 'warning' | 'danger' | 'muted' {
-  if (status.includes('ready') || status.includes('completed')) return 'success'
-  if (status.includes('blocked')) return 'danger'
-  if (status.includes('missing') || status.includes('incomplete')) return 'warning'
+function toneToVariant(tone: string): 'success' | 'warning' | 'danger' | 'muted' {
+  if (tone === 'success') return 'success'
+  if (tone === 'warning') return 'warning'
+  if (tone === 'danger') return 'danger'
   return 'muted'
 }
 
 export function ReadinessBadge({ status }: Props) {
-  return <StatusBadge variant={readinessVariant(status)}>{status}</StatusBadge>
+  const presentation = presentReadiness(status)
+  return <StatusBadge variant={toneToVariant(presentation.tone)}>{presentation.label}</StatusBadge>
 }
