@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRouter, createRootRoute, createRoute, RouterProvider, Navigate } from '@tanstack/react-router'
 import { AppShell } from './components/AppShell'
 import { Overview } from './routes/Overview'
+import { Knowledge } from './routes/Knowledge'
+import { KnowledgeLayer } from './routes/KnowledgeLayer'
+import { KnowledgeArtifact } from './routes/KnowledgeArtifact'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -10,6 +13,10 @@ const queryClient = new QueryClient({
 const rootRoute = createRootRoute({ component: AppShell })
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <Navigate to="/overview" /> })
 const overviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/overview', component: Overview })
+
+const knowledgeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge', component: Knowledge })
+const knowledgeLayerRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge/$layer', component: KnowledgeLayer })
+const knowledgeArtifactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge/$layer/$artifactId', component: KnowledgeArtifact })
 
 function PlaceholderRoute({ title }: { title: string }) {
   return (
@@ -21,11 +28,10 @@ function PlaceholderRoute({ title }: { title: string }) {
   )
 }
 
-const knowledgeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge', component: () => <PlaceholderRoute title="Knowledge" /> })
 const workItemsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items', component: () => <PlaceholderRoute title="Work Items" /> })
 const systemRoute = createRoute({ getParentRoute: () => rootRoute, path: '/system', component: () => <PlaceholderRoute title="System" /> })
 
-const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, workItemsRoute, systemRoute])
+const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, knowledgeLayerRoute, knowledgeArtifactRoute, workItemsRoute, systemRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

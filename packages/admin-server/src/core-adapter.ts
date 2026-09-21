@@ -6,8 +6,10 @@ import {
   loadConfig,
   isModule,
   loadMappedModules,
+  discoverKnowledge,
   exists,
   join,
+  readFile,
 } from '@kaddo/cli/core'
 import type {
   ProjectOverview,
@@ -18,6 +20,8 @@ import type {
   ProjectReadiness,
   ProjectRouteResponse,
   FindingsSummary,
+  KnowledgeInventory,
+  KnowledgeArtifactDetail,
 } from './contracts/schemas.js'
 
 export function getProjectSummary(dir: string): ProjectSummary {
@@ -129,6 +133,84 @@ export function getProjectOverview(dir: string): ProjectOverview {
     readiness: getProjectReadiness(dir),
     route: getProjectRoute(dir),
     findings: getFindings(dir),
+  }
+}
+
+export function getKnowledgeInventory(dir: string): KnowledgeInventory {
+  const artifacts = discoverKnowledge(dir).filter((a) => !a.isWorkItem)
+  const layerSummary = knowledgeLayers(dir)
+
+  const layerMap = new Map<string, { id: string; label: string; status: string; artifacts: KnowledgeInventory['layers'][0]['artifacts'] }>()
+
+  for (const ls of layerSummary) {
+    const id = ls.layer.toLowerCase()
+    layerMap.set(id, { id, label: ls.layer, status: ls.status, artifacts: [] })
+  }
+
+  for (const a of artifacts) {
+    const layerId = a.layer === 'module' ? 'tech' : a.layer
+    if (!layerMap.has(layerId)) {
+      layerMap.set(layerId, { id: layerId, label: layerId.charAt(0).toUpperCase() + layerId.slice(1), status: 'unknown', artifacts: [] })
+    }
+    const layer = layerMap.get(layerId)!
+    const status = a.status || 'available'
+    layer.artifacts.push({
+      id: a.id || a.relPath.replace(/[/\\]/g, '-').replace(/\.md$/, ''),
+      title: a.title || a.relPath.split('/').pop()?.replace(/\.md$/, '').replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled',
+      layer: layerId,
+      path: a.relPath,
+      status: normalizeArtifactStatus(status),
+      type: a.type || undefined,
+    })
+  }
+
+  return { layers: Array.from(layerMap.values()) }
+}
+
+function normalizeArtifactStatus(status: string): string {
+  if (!status || status === 'active' || status === 'ready') return 'available'
+  if (status === 'placeholder' || status === 'draft') return 'placeholder'
+  if (status === 'missing') return 'missing'
+  if (status === 'not-applicable' || status === 'n/a') return 'not-applicable'
+  return 'available'
+}
+
+export function getKnowledgeArtifactDetail(dir: string, artifactId: string): KnowledgeArtifactDetail {
+  if (artifactId.includes('..') || artifactId.startsWith('/') || artifactId.includes('\\')) {
+    throw new CoreError('INVALID_PATH', 'Invalid artifact identifier.')
+  }
+
+  const artifacts = discoverKnowledge(dir).filter((a) => !a.isWorkItem)
+  const match = artifacts.find((a) => {
+    const derivedId = a.id || a.relPath.replace(/[/\\]/g, '-').replace(/\.md$/, '')
+    return derivedId === artifactId
+  })
+
+  if (!match) {
+    throw new CoreError('ARTIFACT_NOT_FOUND', 'Knowledge artifact not found.')
+  }
+
+  const fullPath = join(dir, match.relPath)
+  if (!exists(fullPath)) {
+    throw new CoreError('ARTIFACT_UNAVAILABLE', 'This artifact existed when the Knowledge inventory was loaded but can no longer be read.')
+  }
+
+  const raw = readFile(fullPath)
+  const contentStart = raw.indexOf('---', raw.indexOf('---') + 3)
+  const content = contentStart > 0 ? raw.slice(contentStart + 3).trim() : raw
+
+  const layerId = match.layer === 'module' ? 'tech' : match.layer
+  const status = normalizeArtifactStatus(match.status || 'available')
+
+  return {
+    id: match.id || match.relPath.replace(/[/\\]/g, '-').replace(/\.md$/, ''),
+    title: match.title || match.relPath.split('/').pop()?.replace(/\.md$/, '').replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled',
+    layer: layerId,
+    path: match.relPath,
+    status,
+    format: 'markdown',
+    content,
+    type: match.type || undefined,
   }
 }
 

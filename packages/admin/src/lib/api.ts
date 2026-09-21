@@ -24,6 +24,37 @@ export type ProjectOverview = {
   findings: { blocking: number; warning: number; fyi: number; items: { level: string; message: string }[] }
 }
 
+export type KnowledgeArtifactSummary = {
+  id: string
+  title: string
+  layer: string
+  path: string
+  status: string
+  type?: string
+}
+
+export type KnowledgeInventoryLayer = {
+  id: string
+  label: string
+  status: string
+  artifacts: KnowledgeArtifactSummary[]
+}
+
+export type KnowledgeInventory = {
+  layers: KnowledgeInventoryLayer[]
+}
+
+export type KnowledgeArtifactDetail = {
+  id: string
+  title: string
+  layer: string
+  path: string
+  status: string
+  format: string
+  content: string
+  type?: string
+}
+
 export const api = {
   initSession: () => fetchApi<{ status: string }>('/session'),
   getOverview: () => fetchApi<ProjectOverview>('/overview'),
@@ -34,4 +65,6 @@ export const api = {
   getReadiness: () => fetchApi<ProjectOverview['readiness']>('/readiness'),
   getRoute: () => fetchApi<ProjectOverview['route']>('/route'),
   getFindings: () => fetchApi<ProjectOverview['findings']>('/findings'),
+  getKnowledgeInventory: () => fetchApi<KnowledgeInventory>('/knowledge/inventory'),
+  getKnowledgeArtifact: (artifactId: string) => fetchApi<KnowledgeArtifactDetail>(`/knowledge/artifact/${encodeURIComponent(artifactId)}`),
 }

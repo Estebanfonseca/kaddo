@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import { api } from '../lib/api'
 import { ReadinessBadge } from '../components/ReadinessBadge'
 import { KnowledgeRow } from '../components/KnowledgeRow'
@@ -51,6 +52,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 
 export function Overview() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { data, isLoading, error } = useQuery({
     queryKey: ['overview'],
     queryFn: api.getOverview,
@@ -104,11 +106,13 @@ export function Overview() {
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <SummaryCard
-          title="Knowledge"
-          value={`${knowledgeCount.ready}/${knowledgeCount.total}`}
-          subtitle="Layers ready"
-        />
+        <div onClick={() => router.navigate({ to: '/knowledge' })} style={{ cursor: 'pointer' }}>
+          <SummaryCard
+            title="Knowledge"
+            value={`${knowledgeCount.ready}/${knowledgeCount.total}`}
+            subtitle="Layers ready"
+          />
+        </div>
         <SummaryCard
           title="Work Items"
           value={workItems.total}
@@ -151,7 +155,7 @@ export function Overview() {
         <SectionCard title="Knowledge">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {knowledge.layers.map((l) => (
-              <KnowledgeRow key={l.layer} layer={l.layer} status={l.status} />
+              <KnowledgeRow key={l.layer} layer={l.layer} status={l.status} navigable />
             ))}
           </div>
         </SectionCard>

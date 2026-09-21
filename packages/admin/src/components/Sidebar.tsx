@@ -4,7 +4,7 @@ type NavItem = { label: string; path: string; icon: string; disabled?: boolean }
 
 const navItems: NavItem[] = [
   { label: 'Overview', path: '/overview', icon: '◎' },
-  { label: 'Knowledge', path: '/knowledge', icon: '📚', disabled: true },
+  { label: 'Knowledge', path: '/knowledge', icon: '📚' },
   { label: 'Work Items', path: '/work-items', icon: '📋', disabled: true },
   { label: 'System', path: '/system', icon: '⚙', disabled: true },
 ]

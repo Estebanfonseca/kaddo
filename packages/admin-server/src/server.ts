@@ -13,6 +13,8 @@ import {
   getProjectReadiness,
   getProjectRoute,
   getFindings,
+  getKnowledgeInventory,
+  getKnowledgeArtifactDetail,
   CoreError,
 } from './core-adapter.js'
 import type { AdminStorage } from './storage/admin-storage.js'
@@ -95,6 +97,17 @@ export async function createAdminServer(opts: AdminServerOptions) {
   app.get('/api/v1/admin/readiness', coreRoute(getProjectReadiness))
   app.get('/api/v1/admin/route', coreRoute(getProjectRoute))
   app.get('/api/v1/admin/findings', coreRoute(getFindings))
+  app.get('/api/v1/admin/knowledge/inventory', coreRoute(getKnowledgeInventory))
+  app.get<{ Params: { artifactId: string } }>('/api/v1/admin/knowledge/artifact/:artifactId', async (request) => {
+    try {
+      return getKnowledgeArtifactDetail(projectDir, request.params.artifactId)
+    } catch (err) {
+      if (err instanceof CoreError) {
+        return { error: { code: err.code, message: err.message } }
+      }
+      throw err
+    }
+  })
 
   // SPA fallback: serve index.html for non-API, non-static routes
   if (staticDir) {

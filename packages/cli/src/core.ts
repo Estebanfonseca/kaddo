@@ -7,7 +7,7 @@ export { buildReadinessReport, type ReadinessReport, type ReadinessStatus } from
 export { buildProjectRoute, type ProjectRoute, type RouteStep, type RouteStepStatus } from './core/project-route.js'
 export { knowledgeLayers, type LayerStatus, type LayerName, type LayerMaturity } from './core/layers.js'
 export { loadConfig, isModule, type KaddoConfig, type ProjectState, type RepositoryStructure } from './core/config.js'
-export { discoverWorkItems } from './services/knowledge-artifacts.js'
+export { discoverKnowledge, discoverWorkItems, type KnowledgeArtifact, type KnowledgeLayer } from './services/knowledge-artifacts.js'
 export { loadMappedModules, type MappedModuleWithCoverage } from './services/mapped-modules.js'
 export { lifecycleStateOf, lifecycleCounts, isActiveState, type LifecycleState } from './core/lifecycle.js'
 export { analyzeScopeCoverage, type ScopeCoverageSummary } from './core/scope-coverage.js'

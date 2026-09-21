@@ -83,6 +83,37 @@ export const ProjectOverviewSchema = z.object({
   findings: FindingsSummarySchema,
 })
 
+export const KnowledgeArtifactSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  layer: z.string(),
+  path: z.string(),
+  status: z.string(),
+  type: z.string().optional(),
+})
+
+export const KnowledgeInventoryLayerSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: z.string(),
+  artifacts: z.array(KnowledgeArtifactSummarySchema),
+})
+
+export const KnowledgeInventorySchema = z.object({
+  layers: z.array(KnowledgeInventoryLayerSchema),
+})
+
+export const KnowledgeArtifactDetailSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  layer: z.string(),
+  path: z.string(),
+  status: z.string(),
+  format: z.string(),
+  content: z.string(),
+  type: z.string().optional(),
+})
+
 export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
@@ -98,4 +129,6 @@ export type ModuleSummary = z.infer<typeof ModuleSummarySchema>
 export type ProjectReadiness = z.infer<typeof ProjectReadinessSchema>
 export type ProjectRouteResponse = z.infer<typeof ProjectRouteSchema>
 export type FindingsSummary = z.infer<typeof FindingsSummarySchema>
+export type KnowledgeInventory = z.infer<typeof KnowledgeInventorySchema>
+export type KnowledgeArtifactDetail = z.infer<typeof KnowledgeArtifactDetailSchema>
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>
