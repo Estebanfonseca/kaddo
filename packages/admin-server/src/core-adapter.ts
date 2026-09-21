@@ -7,9 +7,13 @@ import {
   isModule,
   loadMappedModules,
   discoverKnowledge,
+  getWorkItems as coreGetWorkItems,
+  getWorkItem as coreGetWorkItem,
+  WorkItemNotFoundError,
   exists,
   join,
   readFile,
+  type WorkItemFilters,
 } from '@kaddo/cli/core'
 import type {
   ProjectOverview,
@@ -22,6 +26,8 @@ import type {
   FindingsSummary,
   KnowledgeInventory,
   KnowledgeArtifactDetail,
+  WorkItemsList,
+  WorkItemDetail,
 } from './contracts/schemas.js'
 
 export function getProjectSummary(dir: string): ProjectSummary {
@@ -57,6 +63,31 @@ export function getWorkItemSummary(dir: string): WorkItemSummary {
       lifecycle: i.lifecycle,
       initiative: i.initiative,
     })),
+  }
+}
+
+export function getWorkItemsList(dir: string, filters: WorkItemFilters = {}): WorkItemsList {
+  return coreGetWorkItems(dir, filters)
+}
+
+export function getWorkItemDetail(dir: string, workItemId: string): WorkItemDetail {
+  // Path security: the endpoint accepts a Work Item id, never a filesystem path.
+  if (
+    !workItemId ||
+    workItemId.includes('..') ||
+    workItemId.includes('/') ||
+    workItemId.includes('\\') ||
+    workItemId.startsWith('.')
+  ) {
+    throw new CoreError('INVALID_WORK_ITEM_ID', 'Invalid Work Item identifier.')
+  }
+  try {
+    return coreGetWorkItem(dir, workItemId)
+  } catch (err) {
+    if (err instanceof WorkItemNotFoundError) {
+      throw new CoreError('WORK_ITEM_NOT_FOUND', 'This Work Item does not exist in the current project.')
+    }
+    throw err
   }
 }
 

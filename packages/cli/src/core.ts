@@ -12,4 +12,23 @@ export { loadMappedModules, type MappedModuleWithCoverage } from './services/map
 export { lifecycleStateOf, lifecycleCounts, isActiveState, type LifecycleState } from './core/lifecycle.js'
 export { analyzeScopeCoverage, type ScopeCoverageSummary } from './core/scope-coverage.js'
 export { analyzeCrossRepoEvidence } from './core/cross-repo-evidence.js'
+export {
+  getWorkItemsSummary,
+  getWorkItems,
+  getWorkItem,
+  WorkItemNotFoundError,
+  type WorkItemsSummary,
+  type WorkItemListItem,
+  type WorkItemsResult,
+  type WorkItemFilters,
+  type WorkItemDetail,
+  type CoverageEntry,
+  type ImpactEntry,
+  type AcceptanceCriterion,
+  type ReleaseGateEntry,
+  type CompletionExceptionEntry,
+  type EvidenceRepo,
+  type LinkedDecision,
+  type LinkedKnowledge,
+} from './core/work-items.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'

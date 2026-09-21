@@ -114,6 +114,103 @@ export const KnowledgeArtifactDetailSchema = z.object({
   type: z.string().optional(),
 })
 
+// --- Work Items (VS-098) -----------------------------------------------------
+
+export const WorkItemsSummaryStatsSchema = z.object({
+  total: z.number(),
+  active: z.number(),
+  draft: z.number(),
+  ready: z.number(),
+  inProgress: z.number(),
+  blocked: z.number(),
+  completed: z.number(),
+  archived: z.number(),
+})
+
+export const WorkItemListItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  type: z.string(),
+  status: z.string(),
+  implementationStatus: z.string().nullable(),
+  validationStatus: z.string().nullable(),
+  releaseStatus: z.string().nullable(),
+  affectedModules: z.array(z.string()),
+  scopeConfidenceLevel: z.string().nullable(),
+  initiative: z.string().nullable(),
+})
+
+export const WorkItemsListSchema = z.object({
+  summary: WorkItemsSummaryStatsSchema,
+  items: z.array(WorkItemListItemSchema),
+  modules: z.array(z.string()),
+})
+
+const CoverageEntrySchema = z.object({ id: z.string(), status: z.string(), reason: z.string().optional() })
+const ImpactEntrySchema = z.object({
+  surface: z.string(),
+  status: z.string(),
+  reason: z.string().optional(),
+  question: z.string().optional(),
+})
+const AcceptanceCriterionSchema = z.object({ text: z.string(), checked: z.boolean().nullable() })
+const ReleaseGateEntrySchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  reason: z.string().optional(),
+  requiredFor: z.string().optional(),
+})
+const CompletionExceptionEntrySchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  reason: z.string().optional(),
+  category: z.string().optional(),
+  impact: z.string().optional(),
+})
+const RepoValidationSchema = z.object({ command: z.string(), status: z.string(), reason: z.string().optional() })
+const RepoMigrationSchema = z.object({
+  id: z.string(),
+  environment: z.string(),
+  status: z.string(),
+  reason: z.string().optional(),
+})
+const EvidenceRepoSchema = z.object({
+  module: z.string(),
+  role: z.string(),
+  status: z.string(),
+  changedPaths: z.array(z.string()),
+  validations: z.array(RepoValidationSchema),
+  migrations: z.array(RepoMigrationSchema),
+})
+const LinkedDecisionSchema = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  knowledgeId: z.string().optional(),
+  knowledgeLayer: z.string().optional(),
+})
+const LinkedKnowledgeSchema = z.object({ id: z.string(), title: z.string(), layer: z.string() })
+
+export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
+  actor: z.string().nullable(),
+  outcome: z.string().nullable(),
+  currentBehavior: z.string().nullable(),
+  targetBehavior: z.string().nullable(),
+  entryPoints: z.string().nullable(),
+  endToEndFlow: z.string().nullable(),
+  scopeConfidence: z.object({ level: z.string(), reasons: z.array(z.string()) }).nullable(),
+  scopeUnknowns: z.array(z.string()),
+  moduleCoverage: z.array(CoverageEntrySchema),
+  impactAnalysis: z.array(ImpactEntrySchema),
+  acceptanceCriteria: z.array(AcceptanceCriterionSchema),
+  implementationEvidence: z.array(EvidenceRepoSchema),
+  releaseGates: z.array(ReleaseGateEntrySchema),
+  completionExceptions: z.array(CompletionExceptionEntrySchema),
+  decisions: z.array(LinkedDecisionSchema),
+  relatedKnowledge: z.array(LinkedKnowledgeSchema),
+  source: z.object({ type: z.string(), id: z.string().optional(), inferred: z.boolean() }).passthrough(),
+  path: z.string(),
+})
+
 export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
@@ -131,4 +228,7 @@ export type ProjectRouteResponse = z.infer<typeof ProjectRouteSchema>
 export type FindingsSummary = z.infer<typeof FindingsSummarySchema>
 export type KnowledgeInventory = z.infer<typeof KnowledgeInventorySchema>
 export type KnowledgeArtifactDetail = z.infer<typeof KnowledgeArtifactDetailSchema>
+export type WorkItemsList = z.infer<typeof WorkItemsListSchema>
+export type WorkItemListItem = z.infer<typeof WorkItemListItemSchema>
+export type WorkItemDetail = z.infer<typeof WorkItemDetailSchema>
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>

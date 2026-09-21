@@ -113,11 +113,13 @@ export function Overview() {
             subtitle="Layers ready"
           />
         </div>
-        <SummaryCard
-          title="Work Items"
-          value={workItems.total}
-          subtitle={presentWorkItemsSummary(workItems.byState, workItems.total)}
-        />
+        <div onClick={() => router.navigate({ to: '/work-items' })} style={{ cursor: 'pointer' }}>
+          <SummaryCard
+            title="Work Items"
+            value={workItems.total}
+            subtitle={presentWorkItemsSummary(workItems.byState, workItems.total)}
+          />
+        </div>
         <SummaryCard
           title="Modules"
           value={modules.modules.length}

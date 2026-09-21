@@ -8,13 +8,14 @@ import {
   getProjectOverview,
   getProjectSummary,
   getKnowledgeSummary,
-  getWorkItemSummary,
   getModules,
   getProjectReadiness,
   getProjectRoute,
   getFindings,
   getKnowledgeInventory,
   getKnowledgeArtifactDetail,
+  getWorkItemsList,
+  getWorkItemDetail,
   CoreError,
 } from './core-adapter.js'
 import type { AdminStorage } from './storage/admin-storage.js'
@@ -92,7 +93,31 @@ export async function createAdminServer(opts: AdminServerOptions) {
   app.get('/api/v1/admin/overview', coreRoute(getProjectOverview))
   app.get('/api/v1/admin/project', coreRoute(getProjectSummary))
   app.get('/api/v1/admin/knowledge', coreRoute(getKnowledgeSummary))
-  app.get('/api/v1/admin/work-items', coreRoute(getWorkItemSummary))
+  app.get<{ Querystring: { status?: string; module?: string; query?: string } }>(
+    '/api/v1/admin/work-items',
+    async (request) => {
+      try {
+        const { status, module, query } = request.query
+        return getWorkItemsList(projectDir, { status, module, query })
+      } catch (err) {
+        if (err instanceof CoreError) {
+          return { error: { code: err.code, message: err.message } }
+        }
+        throw err
+      }
+    },
+  )
+  app.get<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId', async (request, reply) => {
+    try {
+      return getWorkItemDetail(projectDir, request.params.workItemId)
+    } catch (err) {
+      if (err instanceof CoreError) {
+        const code = err.code === 'WORK_ITEM_NOT_FOUND' ? 404 : err.code === 'INVALID_WORK_ITEM_ID' ? 400 : 500
+        return reply.code(code).send({ error: { code: err.code, message: err.message } })
+      }
+      throw err
+    }
+  })
   app.get('/api/v1/admin/modules', coreRoute(getModules))
   app.get('/api/v1/admin/readiness', coreRoute(getProjectReadiness))
   app.get('/api/v1/admin/route', coreRoute(getProjectRoute))

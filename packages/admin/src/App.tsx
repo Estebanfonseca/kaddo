@@ -5,6 +5,8 @@ import { Overview } from './routes/Overview'
 import { Knowledge } from './routes/Knowledge'
 import { KnowledgeLayer } from './routes/KnowledgeLayer'
 import { KnowledgeArtifact } from './routes/KnowledgeArtifact'
+import { WorkItems } from './routes/WorkItems'
+import { WorkItemDetail } from './routes/WorkItemDetail'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -28,10 +30,11 @@ function PlaceholderRoute({ title }: { title: string }) {
   )
 }
 
-const workItemsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items', component: () => <PlaceholderRoute title="Work Items" /> })
+const workItemsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items', component: WorkItems })
+const workItemDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items/$workItemId', component: WorkItemDetail })
 const systemRoute = createRoute({ getParentRoute: () => rootRoute, path: '/system', component: () => <PlaceholderRoute title="System" /> })
 
-const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, knowledgeLayerRoute, knowledgeArtifactRoute, workItemsRoute, systemRoute])
+const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, knowledgeLayerRoute, knowledgeArtifactRoute, workItemsRoute, workItemDetailRoute, systemRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

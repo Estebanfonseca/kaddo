@@ -134,6 +134,84 @@ export function presentRouteAttention(steps: { status: string }[]): { label: str
   return null
 }
 
+// --- Work Item delivery vocabularies (VS-098) --------------------------------
+// Admin never recomputes these; it only presents the canonical value the Core model provides.
+
+const deliveryToneMap: Record<string, Tone> = {
+  // implementation
+  'not-started': 'neutral',
+  'in-progress': 'info',
+  completed: 'success',
+  partial: 'warning',
+  blocked: 'danger',
+  // validation
+  passed: 'success',
+  failed: 'danger',
+  'accepted-with-exceptions': 'warning',
+  // release
+  'not-assessed': 'neutral',
+  ready: 'success',
+  released: 'success',
+  'not-applicable': 'neutral',
+}
+
+/** Human-readable label + tone for an implementation/validation/release status. */
+export function presentDeliveryStatus(canonical: string | null | undefined): StatusPresentation | null {
+  if (!canonical) return null
+  return { label: humanize(canonical), tone: deliveryToneMap[canonical] ?? 'neutral' }
+}
+
+const coverageLabelMap: Record<string, string> = {
+  affected: 'Affected',
+  'reviewed-not-affected': 'Reviewed — not affected',
+  unknown: 'Unknown',
+  'not-applicable': 'Not applicable',
+}
+
+const coverageToneMap: Record<string, Tone> = {
+  affected: 'info',
+  'reviewed-not-affected': 'neutral',
+  unknown: 'warning',
+  'not-applicable': 'neutral',
+}
+
+export function presentCoverageStatus(status: string): StatusPresentation {
+  return { label: coverageLabelMap[status] ?? humanize(status), tone: coverageToneMap[status] ?? 'neutral' }
+}
+
+const gateToneMap: Record<string, Tone> = {
+  pending: 'warning',
+  passed: 'success',
+  failed: 'danger',
+  blocked: 'danger',
+  waived: 'neutral',
+  'not-applicable': 'neutral',
+}
+
+export function presentGateStatus(status: string): StatusPresentation {
+  return { label: humanize(status), tone: gateToneMap[status] ?? 'neutral' }
+}
+
+const scopeConfidenceToneMap: Record<string, Tone> = {
+  high: 'success',
+  medium: 'warning',
+  low: 'danger',
+}
+
+export function presentScopeConfidence(level: string | null | undefined): StatusPresentation {
+  if (!level) return { label: 'Not assessed', tone: 'neutral' }
+  return { label: humanize(level), tone: scopeConfidenceToneMap[level] ?? 'neutral' }
+}
+
+/** Whether a coverage/impact status should be surfaced first (progressive disclosure). */
+export function isPrimaryCoverage(status: string): boolean {
+  return status === 'affected' || status === 'unknown'
+}
+
+export function toneToVariant(tone: Tone): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
+  return tone === 'neutral' ? 'muted' : tone
+}
+
 export function toneToColor(tone: Tone): string {
   switch (tone) {
     case 'success': return 'var(--success)'

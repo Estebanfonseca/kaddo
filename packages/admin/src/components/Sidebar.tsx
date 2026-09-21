@@ -5,7 +5,7 @@ type NavItem = { label: string; path: string; icon: string; disabled?: boolean }
 const navItems: NavItem[] = [
   { label: 'Overview', path: '/overview', icon: '◎' },
   { label: 'Knowledge', path: '/knowledge', icon: '📚' },
-  { label: 'Work Items', path: '/work-items', icon: '📋', disabled: true },
+  { label: 'Work Items', path: '/work-items', icon: '📋' },
   { label: 'System', path: '/system', icon: '⚙', disabled: true },
 ]
 
@@ -32,7 +32,7 @@ export function Sidebar({ projectName }: { projectName: string }) {
 
       <nav style={{ padding: '8px 0', flex: 1 }}>
         {navItems.map((item) => {
-          const active = currentPath === item.path
+          const active = currentPath === item.path || (item.path !== '/overview' && currentPath.startsWith(item.path + '/'))
           return (
             <button
               key={item.path}
