@@ -191,6 +191,7 @@ const LinkedDecisionSchema = z.object({
 const LinkedKnowledgeSchema = z.object({ id: z.string(), title: z.string(), layer: z.string() })
 
 export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
+  summary: z.string().nullable(),
   actor: z.string().nullable(),
   outcome: z.string().nullable(),
   currentBehavior: z.string().nullable(),
@@ -209,6 +210,10 @@ export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
   relatedKnowledge: z.array(LinkedKnowledgeSchema),
   source: z.object({ type: z.string(), id: z.string().optional(), inferred: z.boolean() }).passthrough(),
   path: z.string(),
+  refinement: z.object({
+    status: z.enum(['needs-refinement', 'refined']),
+    aspects: z.object({ outcome: z.boolean(), journey: z.boolean(), modules: z.boolean(), impact: z.boolean(), acceptance: z.boolean() }),
+  }),
 })
 
 // --- Work Item writes (VS-099) -----------------------------------------------
@@ -274,16 +279,6 @@ export const WorkItemCreateWithAnswersSchema = z.object({
   intent: z.string().min(1),
   type: z.string().min(1),
   answers: z.record(z.string(), z.string()).optional(),
-})
-
-export const RefinementFeedbackSchema = z.object({
-  refinementId: z.string().min(1),
-  feedback: z.string().min(1),
-})
-
-export const RefinementApplySchema = z.object({
-  refinementId: z.string().min(1),
-  expectedRevision: z.string().min(1),
 })
 
 export const ErrorResponseSchema = z.object({

@@ -13,6 +13,7 @@ import { AcceptanceCriteria } from '../components/AcceptanceCriteria'
 import { ImplementationEvidence } from '../components/ImplementationEvidence'
 import { ReleaseGates } from '../components/ReleaseGates'
 import { ArtifactPath } from '../components/ArtifactPath'
+import { RefinementHandoffCard } from '../components/RefinementHandoffCard'
 import { humanize, presentWorkItemType } from '../lib/presentation'
 
 function Skeleton() {
@@ -79,14 +80,6 @@ export function WorkItemDetail() {
           >
             ↻ Refresh
           </button>
-          {wi.status === 'draft' && (
-            <button
-              onClick={() => router.navigate({ to: '/work-items/$workItemId/refine', params: { workItemId } })}
-              style={{ padding: '6px 12px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
-            >
-              ✦ Refine with AI
-            </button>
-          )}
           {(wi.status === 'draft' || wi.status === 'ready') && (
             <button
               onClick={() => router.navigate({ to: '/work-items/$workItemId/edit', params: { workItemId } })}
@@ -106,6 +99,17 @@ export function WorkItemDetail() {
           <WorkItemStatus status={wi.status} />
         </div>
       </div>
+
+      {/* Captured intent — shown while the Work Item still only carries the initial request. */}
+      {wi.status === 'draft' && wi.refinement.status === 'needs-refinement' && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 18px', marginBottom: 4 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--foreground-muted)', margin: '0 0 6px' }}>Captured intent</h3>
+          <p style={{ fontSize: 15, margin: 0 }}>{wi.summary || wi.outcome || wi.title}</p>
+        </div>
+      )}
+
+      {/* Refinement handoff — refinement happens externally, next to the repository. */}
+      {wi.status === 'draft' && <RefinementHandoffCard workItemId={workItemId} refinement={wi.refinement} />}
 
       {/* Delivery status trio — independent dimensions, only when the modern model records them */}
       {hasDelivery && (
@@ -141,10 +145,12 @@ export function WorkItemDetail() {
         </Section>
       )}
 
-      {/* Scope confidence — always shown (Not assessed when absent) */}
-      <Section title="Scope confidence">
-        <ScopeConfidence level={wi.scopeConfidence?.level ?? null} reasons={wi.scopeConfidence?.reasons ?? []} />
-      </Section>
+      {/* Scope confidence — shown everywhere except a bare (unrefined) draft, to avoid noise */}
+      {!(wi.status === 'draft' && wi.refinement.status === 'needs-refinement' && !wi.scopeConfidence) && (
+        <Section title="Scope confidence">
+          <ScopeConfidence level={wi.scopeConfidence?.level ?? null} reasons={wi.scopeConfidence?.reasons ?? []} />
+        </Section>
+      )}
 
       {/* Scope unknowns */}
       {wi.scopeUnknowns.length > 0 && (

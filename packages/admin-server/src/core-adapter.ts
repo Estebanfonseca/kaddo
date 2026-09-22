@@ -16,6 +16,7 @@ import {
   validateWorkItem as coreValidateWorkItem,
   transitionWorkItem as coreTransitionWorkItem,
   getWorkItemCaptureDefinition as coreGetCaptureDefinition,
+  buildRefinementHandoff as coreBuildRefinementHandoff,
   WorkItemWriteError,
   exists,
   join,
@@ -117,11 +118,19 @@ function assertValidWorkItemId(workItemId: string): void {
 
 function mapWriteError(err: unknown): never {
   if (err instanceof WorkItemWriteError) throw new CoreError(err.code, err.message)
+  if (err instanceof WorkItemNotFoundError) throw new CoreError('WORK_ITEM_NOT_FOUND', 'This Work Item does not exist in the current project.')
   throw err as Error
 }
 
 export function getCaptureDefinition(): ReturnType<typeof coreGetCaptureDefinition> {
   return coreGetCaptureDefinition()
+}
+
+export function getRefinementHandoff(dir: string, workItemId: string): ReturnType<typeof coreBuildRefinementHandoff> {
+  assertValidWorkItemId(workItemId)
+  try {
+    return coreBuildRefinementHandoff(dir, workItemId)
+  } catch (err) { mapWriteError(err) }
 }
 
 export function createWorkItemAdmin(dir: string, body: { intent: string; type: string; answers?: Record<string, string> }): WorkItemWriteResult {

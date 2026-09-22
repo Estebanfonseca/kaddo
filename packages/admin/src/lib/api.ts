@@ -133,6 +133,7 @@ export type LinkedDecision = { id: string; title?: string; knowledgeId?: string;
 export type LinkedKnowledge = { id: string; title: string; layer: string }
 
 export type WorkItemDetail = WorkItemListItem & {
+  summary: string | null
   actor: string | null
   outcome: string | null
   currentBehavior: string | null
@@ -151,6 +152,7 @@ export type WorkItemDetail = WorkItemListItem & {
   relatedKnowledge: LinkedKnowledge[]
   source: { type: string; id?: string; inferred: boolean }
   path: string
+  refinement: RefinementStatus
 }
 
 export type WorkItemInput = {
@@ -191,32 +193,19 @@ export type WorkItemWriteResult = { id: string; path: string; revision: string; 
 export type CaptureQuestion = { id: string; prompt: string; placeholder: string; field: string; required: boolean }
 export type WorkItemCaptureDefinition = { types: { value: string; label: string }[]; questions: Record<string, CaptureQuestion[]> }
 
-export type RefinementProposal = {
-  title?: string
-  outcome?: { actor?: string; observableOutcome?: string; currentBehavior?: string; targetBehavior?: string }
-  journey?: { entryPoints?: string[]; flow?: string[] }
-  affectedModules?: string[]
-  moduleCoverage?: { id: string; status: string; reason?: string }[]
-  impactAnalysis?: { surface: string; status: string; reason?: string; question?: string }[]
-  scopeConfidence?: { level: string; reasons?: string[] }
-  scopeUnknowns?: string[]
-  acceptanceCriteria?: string[]
-  linkedDecisions?: string[]
-  relatedKnowledge?: string[]
+export type RefinementStatus = {
+  status: 'needs-refinement' | 'refined'
+  aspects: { outcome: boolean; journey: boolean; modules: boolean; impact: boolean; acceptance: boolean }
 }
 
-export type RefinementValidation = { findings: ValidationFinding[]; blocking: number; warning: number; fyi: number; canApply: boolean }
-
-export type RefinementSession = {
-  refinementId: string
+export type RefinementHandoff = {
   workItemId: string
-  sourceRevision: string
-  status: 'ready-for-review' | 'failed' | 'stale' | 'applied'
-  intent: string
-  proposal: RefinementProposal
-  validation: RefinementValidation
-  contextUsed: { id: string; title: string; layer: string }[]
-  meta: { provider: string; model?: string; durationMs: number; inputTokens?: number; outputTokens?: number; repairAttempts?: number }
+  title: string
+  projectName: string
+  refinement: RefinementStatus
+  recommendedAgent: string
+  recommendedSkill: string
+  text: string
 }
 
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
@@ -254,11 +243,7 @@ export const api = {
     mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/transitions/ready`, 'POST', { expectedRevision }),
   transitionDraft: (workItemId: string, expectedRevision: string) =>
     mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/transitions/draft`, 'POST', { expectedRevision }),
-  // Refinement (VS-099.1)
-  startRefinement: (workItemId: string) =>
-    mutateApi<RefinementSession>(`/work-items/${encodeURIComponent(workItemId)}/refinement`, 'POST'),
-  refinementFeedback: (workItemId: string, refinementId: string, feedback: string) =>
-    mutateApi<RefinementSession>(`/work-items/${encodeURIComponent(workItemId)}/refinement/feedback`, 'POST', { refinementId, feedback }),
-  applyRefinement: (workItemId: string, refinementId: string, expectedRevision: string) =>
-    mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/refinement/apply`, 'POST', { refinementId, expectedRevision }),
+  // Refinement handoff (VS-099.1) — read-only; refinement happens externally.
+  getRefinementHandoff: (workItemId: string) =>
+    fetchApi<RefinementHandoff>(`/work-items/${encodeURIComponent(workItemId)}/refinement-handoff`),
 }

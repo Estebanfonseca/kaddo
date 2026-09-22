@@ -25,8 +25,8 @@ export function WorkItemNew() {
     try {
       const res = await api.createWorkItem(intent.trim(), type, answers)
       queryClient.invalidateQueries({ queryKey: ['work-items'] })
-      // Land on the refine screen — the captured intent is meant to be refined next.
-      router.navigate({ to: '/work-items/$workItemId/refine', params: { workItemId: res.id } })
+      // Land on the Work Item detail — it shows the captured intent and how to refine externally.
+      router.navigate({ to: '/work-items/$workItemId', params: { workItemId: res.id } })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The Work Item could not be created.')
       setBusy(false)

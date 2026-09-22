@@ -22,32 +22,26 @@ import {
   validateWorkItemAdmin,
   transitionWorkItemAdmin,
   getCaptureDefinition,
+  getRefinementHandoff,
   CoreError,
 } from './core-adapter.js'
 import {
   WorkItemCreateWithAnswersSchema,
   WorkItemUpdateSchema,
   WorkItemTransitionSchema,
-  RefinementFeedbackSchema,
-  RefinementApplySchema,
 } from './contracts/schemas.js'
-import { createRefinementService, RefinementProviderError } from './refinement/index.js'
 import type { AdminStorage } from './storage/admin-storage.js'
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 function statusForCode(code: string): number {
   switch (code) {
-    case 'WORK_ITEM_NOT_FOUND':
-    case 'REFINEMENT_NOT_FOUND': return 404
+    case 'WORK_ITEM_NOT_FOUND': return 404
     case 'WORK_ITEM_CONFLICT':
     case 'WORK_ITEM_NOT_EDITABLE': return 409
     case 'INVALID_INPUT':
     case 'INVALID_WORK_ITEM_ID':
     case 'INVALID_TRANSITION': return 400
-    case 'TIMEOUT': return 504
-    case 'PROVIDER_ERROR':
-    case 'INVALID_RESPONSE': return 502
     default: return 500
   }
 }
@@ -65,8 +59,6 @@ export async function createAdminServer(opts: AdminServerOptions) {
 
   const app = Fastify({ logger: false })
   const sessionManager = new SessionManager(storage)
-  // Refinement sessions are operational, in-memory state (disposable, never canonical).
-  const refinement = createRefinementService()
 
   await app.register(fastifyCookie)
   await app.register(fastifyCors, {
@@ -201,32 +193,17 @@ export async function createAdminServer(opts: AdminServerOptions) {
     return writeHandler(reply, () => transitionWorkItemAdmin(projectDir, request.params.workItemId, 'draft', parsed.data.expectedRevision))
   })
 
-  // LLM-assisted refinement (VS-099.1). The Work Item is never modified until Apply.
-  const refineHandler = async <T>(reply: import('fastify').FastifyReply, fn: () => Promise<T> | T) => {
+  // Refinement handoff (VS-099.1). Read-only: refinement happens externally, next to the
+  // repository, in a Kaddo-enabled agent. Admin only produces the copyable instructions.
+  app.get<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/refinement-handoff', async (request, reply) => {
     try {
-      return await fn()
+      return getRefinementHandoff(projectDir, request.params.workItemId)
     } catch (err) {
-      if (err instanceof RefinementProviderError || err instanceof CoreError) {
+      if (err instanceof CoreError) {
         return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } })
       }
       throw err
     }
-  }
-
-  app.post<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/refinement', async (request, reply) => {
-    return refineHandler(reply, () => refinement.start(projectDir, request.params.workItemId))
-  })
-
-  app.post<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/refinement/feedback', async (request, reply) => {
-    const parsed = RefinementFeedbackSchema.safeParse(request.body)
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'refinementId and feedback are required.' } })
-    return refineHandler(reply, () => refinement.feedback(projectDir, request.params.workItemId, parsed.data.refinementId, parsed.data.feedback))
-  })
-
-  app.post<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId/refinement/apply', async (request, reply) => {
-    const parsed = RefinementApplySchema.safeParse(request.body)
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'refinementId and expectedRevision are required.' } })
-    return refineHandler(reply, () => refinement.apply(projectDir, request.params.workItemId, parsed.data.refinementId, parsed.data.expectedRevision))
   })
 
   app.get<{ Params: { workItemId: string } }>('/api/v1/admin/work-items/:workItemId', async (request, reply) => {

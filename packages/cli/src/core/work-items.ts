@@ -81,6 +81,8 @@ export type LinkedDecision = { id: string; title?: string; knowledgeId?: string;
 export type LinkedKnowledge = { id: string; title: string; layer: string }
 
 export type WorkItemDetail = WorkItemListItem & {
+  /** The captured intent (frontmatter summary), i.e. what the human asked for. */
+  summary: string | null
   /** Prose outcome sections (absent when not written; placeholders are treated as absent). */
   actor: string | null
   outcome: string | null
@@ -101,6 +103,41 @@ export type WorkItemDetail = WorkItemListItem & {
   source: WorkItemSource
   /** POSIX path relative to the project root. */
   path: string
+  /** How far the Work Item has been refined (independent of lifecycle). */
+  refinement: RefinementStatus
+}
+
+/**
+ * Refinement status — a deterministic, presentation-only signal of how much end-to-end scope the
+ * artifact carries. It is NOT a lifecycle state: a Work Item can be lifecycle `draft` and
+ * refinement `refined` at the same time. Derived here in Core so interfaces never invent their own.
+ */
+export type RefinementStatus = {
+  status: 'needs-refinement' | 'refined'
+  aspects: { outcome: boolean; journey: boolean; modules: boolean; impact: boolean; acceptance: boolean }
+}
+
+export function computeRefinementStatus(wi: {
+  currentBehavior: string | null
+  targetBehavior: string | null
+  entryPoints: string | null
+  endToEndFlow: string | null
+  affectedModules: string[]
+  moduleCoverage: CoverageEntry[]
+  impactAnalysis: ImpactEntry[]
+  acceptanceCriteria: AcceptanceCriterion[]
+}): RefinementStatus {
+  const aspects = {
+    outcome: Boolean(wi.currentBehavior?.trim() || wi.targetBehavior?.trim()),
+    journey: Boolean(wi.entryPoints?.trim() || wi.endToEndFlow?.trim()),
+    modules: wi.affectedModules.length > 0 || wi.moduleCoverage.length > 0,
+    impact: wi.impactAnalysis.length > 0,
+    acceptance: wi.acceptanceCriteria.length > 0,
+  }
+  // "Materially refined": the scope tells an end-to-end story — a target behavior, the modules it
+  // touches, and how it will be accepted. Otherwise the item still only carries captured intent.
+  const refined = aspects.outcome && aspects.modules && aspects.acceptance
+  return { status: refined ? 'refined' : 'needs-refinement', aspects }
 }
 
 export class WorkItemNotFoundError extends Error {
@@ -199,8 +236,9 @@ export function getWorkItem(dir: string, workItemId: string): WorkItemDetail {
   const knowledge = discoverKnowledge(dir).filter((a) => !a.isWorkItem)
   const knowledgeById = new Map(knowledge.filter((k) => k.id).map((k) => [k.id, k]))
 
-  return {
+  const detail = {
     ...base,
+    summary: match.summary?.trim() || null,
     actor: sectionText(sections, ['actor']),
     outcome: sectionText(sections, ['actor and outcome', 'outcome', 'expected result']),
     currentBehavior: sectionText(sections, ['current behavior', 'current behaviour']),
@@ -220,6 +258,7 @@ export function getWorkItem(dir: string, workItemId: string): WorkItemDetail {
     source: parseWorkItemSource(fm),
     path: match.relPath,
   }
+  return { ...detail, refinement: computeRefinementStatus(detail) }
 }
 
 // --- Body parsing ------------------------------------------------------------
