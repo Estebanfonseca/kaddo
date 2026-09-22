@@ -22,6 +22,7 @@ import { lifecycleStateOf, type LifecycleState } from './lifecycle.js'
 // Validate against the canonical Work Item type catalog (feature/bugfix/hotfix/spike/chore) — the
 // same list the capture definition offers — not the artifact-discovery classifier set.
 import { isValidType, normalizeType } from './knowledge-levels.js'
+import { loadSystemTopology } from './system-topology.js'
 
 const WORK_ITEMS_DIR = 'knowledge/delivery/work-items'
 
@@ -503,6 +504,25 @@ export function validateWorkItem(dir: string, id: string): ValidationResult {
   }
   for (const s of input.impactAnalysis) {
     if (s.status === 'unknown') findings.push({ level: 'fyi', message: `Impact on ${s.surface} is unknown.` })
+  }
+
+  // Graph-assisted system impact consistency (VS-101).
+  const topology = loadSystemTopology(dir)
+  const entityById = new Map(topology.entities.map((e) => [e.id, e]))
+  const fm = data as Record<string, unknown>
+  const affectedEntities = Array.isArray(fm.affected_system_entities) ? fm.affected_system_entities.map(String) : []
+  for (const eid of affectedEntities) {
+    const e = entityById.get(eid)
+    if (!e) { findings.push({ level: 'blocking', message: `Affected system entity "${eid}" does not exist in the semantic topology.` }); continue }
+    if (e.moduleId && !input.affectedModules.includes(e.moduleId)) {
+      findings.push({ level: 'warning', message: `System entity "${e.label}" belongs to module "${e.moduleId}", which is not in affected_modules.` })
+    }
+  }
+  if (Array.isArray(fm.reviewed_system_entities)) {
+    for (const r of fm.reviewed_system_entities as Record<string, unknown>[]) {
+      const rid = r && typeof r === 'object' ? String(r.id ?? '') : ''
+      if (rid && !entityById.has(rid)) findings.push({ level: 'warning', message: `Reviewed system entity "${rid}" does not exist in the semantic topology.` })
+    }
   }
 
   const canMarkReady = !findings.some((f) => f.level === 'blocking')

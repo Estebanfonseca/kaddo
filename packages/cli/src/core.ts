@@ -58,6 +58,10 @@ export { computeRefinementStatus, type RefinementStatus } from './core/work-item
 export {
   getSystemMapProjection,
   getSystemNodeContext,
+  searchSystemNodes,
+  getSystemNeighbors,
+  findSystemPaths,
+  getImpactCandidates,
   type SystemMapProjection,
   type SystemMapNode,
   type SystemMapRelationship,
@@ -65,6 +69,11 @@ export {
   type SystemMapMetadata,
   type SystemDimension,
   type SystemNodeContext,
+  type TraversalOptions,
+  type NeighborResult,
+  type ImpactCandidate,
+  type ImpactReason,
+  type ImpactCandidatesResult,
 } from './core/system-map.js'
 export {
   loadSystemTopology,

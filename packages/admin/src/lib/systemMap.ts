@@ -85,7 +85,15 @@ export function layoutSystemMap(projection: SystemMapProjection): SystemLayout {
 }
 
 /** Group background nodes first (render behind), then data nodes. */
-export function toReactFlowNodes(projection: SystemMapProjection, layout: SystemLayout, selectedId: string | null): RFNode[] {
+/** Work Item impact classification for the System Explorer overlay (VS-101). */
+export type ImpactClass = 'affected' | 'reviewed' | 'unknown'
+
+export function toReactFlowNodes(
+  projection: SystemMapProjection,
+  layout: SystemLayout,
+  selectedId: string | null,
+  impact?: Map<string, ImpactClass>,
+): RFNode[] {
   const groupNodes: RFNode[] = projection.groups
     .filter((grp) => layout.groupBoxes.has(grp.id))
     .map((grp) => {
@@ -106,7 +114,7 @@ export function toReactFlowNodes(projection: SystemMapProjection, layout: System
     id: n.id,
     type: 'system',
     position: layout.positions.get(n.id) ?? { x: 0, y: 0 },
-    data: { node: n, selected: n.id === selectedId },
+    data: { node: n, selected: n.id === selectedId, impact: impact?.get(n.id) ?? null, dimmed: impact != null && !impact.has(n.id) },
     zIndex: 1,
   }))
 

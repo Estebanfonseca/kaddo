@@ -269,6 +269,183 @@ export function getSystemNodeContext(dir: string, nodeId: string): SystemNodeCon
   return { node, incoming, outgoing }
 }
 
+// --- Graph-assisted impact traversal (VS-101) --------------------------------
+
+export type TraversalOptions = {
+  maxDepth?: number
+  maxNodes?: number
+  /** Only traverse these relationship types (empty/undefined = all). */
+  relationshipTypes?: string[]
+  /** Only include nodes in these modules (empty/undefined = all). */
+  moduleFilter?: string[]
+}
+
+export type NeighborResult = {
+  seed: string
+  nodes: SystemMapNode[]
+  relationships: SystemMapRelationship[]
+  /** True when maxNodes was reached — more graph context exists. */
+  truncated: boolean
+}
+
+const DEFAULT_MAX_DEPTH = 2
+const DEFAULT_MAX_NODES = 50
+
+/** Deterministic search over label / type / module / purpose — concepts before implementation. */
+export function searchSystemNodes(dir: string, query: string): SystemMapNode[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  const rank = (n: SystemMapNode) => (n.dimension === 'system' ? 0 : n.dimension === 'knowledge' ? 1 : n.dimension === 'delivery' ? 2 : n.dimension === 'unknown' ? 3 : 4)
+  return getSystemMapProjection(dir).nodes
+    .filter((n) =>
+      n.label.toLowerCase().includes(q) ||
+      n.type.toLowerCase().includes(q) ||
+      (n.moduleId ?? '').toLowerCase().includes(q) ||
+      (n.purpose ?? '').toLowerCase().includes(q),
+    )
+    .sort((a, b) => rank(a) - rank(b))
+}
+
+/**
+ * Bounded breadth-first neighborhood of a node. Never returns the whole graph: depth and node
+ * count are capped and `truncated` signals that more context exists. Read-only.
+ */
+export function getSystemNeighbors(dir: string, nodeId: string, opts: TraversalOptions = {}): NeighborResult | null {
+  const projection = getSystemMapProjection(dir)
+  const byId = new Map(projection.nodes.map((n) => [n.id, n]))
+  if (!byId.has(nodeId)) return null
+
+  const maxDepth = Math.max(1, opts.maxDepth ?? DEFAULT_MAX_DEPTH)
+  const maxNodes = Math.max(1, opts.maxNodes ?? DEFAULT_MAX_NODES)
+  const relTypes = opts.relationshipTypes && opts.relationshipTypes.length ? new Set(opts.relationshipTypes) : null
+  const modules = opts.moduleFilter && opts.moduleFilter.length ? new Set(opts.moduleFilter) : null
+
+  const includeNode = (n: SystemMapNode) => !modules || (n.moduleId != null && modules.has(n.moduleId)) || n.id === nodeId
+
+  const visited = new Set<string>([nodeId])
+  const nodes: SystemMapNode[] = []
+  const rels: SystemMapRelationship[] = []
+  let frontier = [nodeId]
+  let truncated = false
+
+  for (let depth = 0; depth < maxDepth && frontier.length > 0 && !truncated; depth++) {
+    const next: string[] = []
+    for (const current of frontier) {
+      for (const r of projection.relationships) {
+        if (relTypes && !relTypes.has(r.type)) continue
+        const other = r.source === current ? r.target : r.target === current ? r.source : null
+        if (!other) continue
+        const otherNode = byId.get(other)
+        if (!otherNode || !includeNode(otherNode)) continue
+        if (!rels.some((x) => x.id === r.id)) rels.push(r)
+        if (!visited.has(other)) {
+          if (nodes.length >= maxNodes) { truncated = true; break }
+          visited.add(other)
+          nodes.push(otherNode)
+          next.push(other)
+        }
+      }
+      if (truncated) break
+    }
+    frontier = next
+  }
+
+  return { seed: nodeId, nodes, relationships: rels, truncated }
+}
+
+/** Directed paths from source to target up to maxDepth hops (each path is a list of node ids). */
+export function findSystemPaths(dir: string, source: string, target: string, opts: { maxDepth?: number } = {}): string[][] {
+  const projection = getSystemMapProjection(dir)
+  const byId = new Map(projection.nodes.map((n) => [n.id, n]))
+  if (!byId.has(source) || !byId.has(target)) return []
+  const maxDepth = Math.max(1, opts.maxDepth ?? 4)
+
+  const out = new Map<string, string[]>() // source -> targets
+  for (const r of projection.relationships) {
+    if (!out.has(r.source)) out.set(r.source, [])
+    out.get(r.source)!.push(r.target)
+  }
+
+  const paths: string[][] = []
+  const walk = (node: string, path: string[]) => {
+    if (paths.length >= 20) return
+    if (node === target && path.length > 1) { paths.push([...path]); return }
+    if (path.length > maxDepth) return
+    for (const nxt of out.get(node) ?? []) {
+      if (path.includes(nxt)) continue // no cycles
+      walk(nxt, [...path, nxt])
+    }
+  }
+  walk(source, [source])
+  return paths
+}
+
+// --- Impact candidates -------------------------------------------------------
+
+export type ImpactReason = { relationship: string; from: string; to: string }
+export type ImpactCandidate = {
+  nodeId: string
+  label: string
+  kind: string
+  moduleId?: string
+  reason: ImpactReason[]
+  graphPath?: string[]
+  implementationRefs?: string[]
+  knowledgeRefs?: { id: string; layer: string }[]
+  /** Always starts as a candidate — the Graph suggests inspection, it never confirms impact. */
+  status: 'candidate'
+  provenance: { source: 'graph-assisted' }
+}
+
+export type ImpactCandidatesResult = {
+  seeds: string[]
+  candidates: ImpactCandidate[]
+  truncated: boolean
+  /** Topology coverage, so the agent never reads "no edge" as "no impact". */
+  topologyStatus: 'unavailable' | 'partial' | 'available'
+}
+
+/**
+ * From one or more seed nodes, produce impact CANDIDATES the agent should inspect — never confirmed
+ * scope. Each candidate carries the relationship reason and graph path that surfaced it. Bounded by
+ * the same traversal guardrails. Read-only, deterministic, no LLM.
+ */
+export function getImpactCandidates(dir: string, seedIds: string[], opts: TraversalOptions = {}): ImpactCandidatesResult {
+  const projection = getSystemMapProjection(dir)
+  const byId = new Map(projection.nodes.map((n) => [n.id, n]))
+  const seeds = seedIds.filter((s) => byId.has(s))
+  const candidates = new Map<string, ImpactCandidate>()
+  let truncated = false
+
+  for (const seed of seeds) {
+    const neighborhood = getSystemNeighbors(dir, seed, opts)
+    if (!neighborhood) continue
+    if (neighborhood.truncated) truncated = true
+    for (const n of neighborhood.nodes) {
+      if (seeds.includes(n.id)) continue
+      const rel = neighborhood.relationships.find((r) => (r.source === seed && r.target === n.id) || (r.target === seed && r.source === n.id))
+      const reason: ImpactReason = rel
+        ? { relationship: rel.label, from: byId.get(rel.source)?.label ?? rel.source, to: byId.get(rel.target)?.label ?? rel.target }
+        : { relationship: 'related to', from: byId.get(seed)?.label ?? seed, to: n.label }
+      const existing = candidates.get(n.id)
+      if (existing) { existing.reason.push(reason); continue }
+      const path = findSystemPaths(dir, seed, n.id, { maxDepth: opts.maxDepth ?? DEFAULT_MAX_DEPTH })[0]
+      candidates.set(n.id, {
+        nodeId: n.id, label: n.label, kind: n.type,
+        ...(n.moduleId ? { moduleId: n.moduleId } : {}),
+        reason: [reason],
+        ...(path ? { graphPath: path.map((id) => byId.get(id)?.label ?? id) } : {}),
+        ...(n.implementationRefs?.length ? { implementationRefs: n.implementationRefs } : {}),
+        ...(n.knowledgeRefs?.length ? { knowledgeRefs: n.knowledgeRefs } : {}),
+        status: 'candidate',
+        provenance: { source: 'graph-assisted' },
+      })
+    }
+  }
+
+  return { seeds, candidates: [...candidates.values()], truncated, topologyStatus: projection.metadata.topologyStatus }
+}
+
 function toNode(
   n: GraphNode,
   knowledgeByPath: Map<string, { id: string; layer: string }>,

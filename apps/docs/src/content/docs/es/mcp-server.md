@@ -105,6 +105,27 @@ lectura excepto `kaddo_export_capsule` que escribe cápsulas derivadas bajo `.ka
 llama a un LLM. `kaddo_suggest_branch_strategy` solo *sugiere* nombres de rama y mensajes de
 commit — el agente o usuario debe crear branches y hacer commit manualmente.
 
+## Herramientas del Graph del sistema
+
+Recorrido de solo lectura sobre la [topología semántica del sistema](/es/commands/admin/). Ayudan al
+agente a **ampliar lo que debe investigar** antes de decidir el alcance de un Work Item. Todo lo que
+exponen es un **candidato de impacto** a verificar en el repositorio — nunca alcance confirmado. Que
+no exista una arista en el Graph no significa "sin impacto": el recorrido está acotado y la cobertura
+puede ser parcial.
+
+| Herramienta | Propósito |
+|---|---|
+| `kaddo_system_search` | Busca entidades por etiqueta / tipo / módulo / propósito (conceptos antes que implementación). |
+| `kaddo_system_node` | Una entidad con sus relaciones entrantes y salientes. |
+| `kaddo_system_neighbors` | Vecindario BFS acotado (`maxDepth` / `maxNodes`, opcional `relationshipTypes` / `moduleId`). Informa truncamiento. |
+| `kaddo_system_paths` | Caminos dirigidos, acíclicos y acotados entre dos entidades. |
+| `kaddo_system_impact_candidates` | **Candidatos** de impacto asistidos por el Graph desde una o más entidades semilla, con razones y caminos. |
+
+**Seguridad:** estas herramientas nunca deciden el alcance, mutan el Work Item, llaman a un LLM ni
+tocan git. El agente inspecciona cada candidato y lo clasifica como *afectado*, *revisado-no-afectado*
+o *desconocido*, preservando la razón; una persona confirma antes de escribir la clasificación en el
+Work Item.
+
 ## Derived tools (escriben solo bajo `.kaddo/`)
 
 Cuando un artefacto derivado falta o está desactualizado, estas tools lo regeneran en el sitio —

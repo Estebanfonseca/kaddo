@@ -102,6 +102,25 @@ Tools for agents working with multirepo `core`/`module` projects. All are read-o
 `kaddo_suggest_branch_strategy` only *suggests* branch names and commit messages — the agent
 or user must create branches and commit manually.
 
+## System Graph tools
+
+Read-only traversal over the semantic [system topology](/commands/admin/). They help an agent
+**widen what it must investigate** before deciding a Work Item's scope. Everything they surface is
+an **impact candidate** to verify in the repository — never confirmed scope. A missing Graph edge
+does not mean "no impact": traversal is bounded and coverage may be partial.
+
+| Tool | Purpose |
+|---|---|
+| `kaddo_system_search` | Search entities by label / kind / module / purpose (concepts before implementation). |
+| `kaddo_system_node` | One entity plus its incoming and outgoing relationships. |
+| `kaddo_system_neighbors` | Bounded BFS neighborhood (`maxDepth` / `maxNodes`, optional `relationshipTypes` / `moduleId`). Reports truncation. |
+| `kaddo_system_paths` | Directed, acyclic, bounded paths between two entities. |
+| `kaddo_system_impact_candidates` | Graph-assisted impact **candidates** from one or more seed entities, with reasons and graph paths. |
+
+**Security:** these tools never decide scope, mutate the Work Item, run an LLM or touch git. The
+agent inspects each candidate and classifies it as *affected*, *reviewed-not-affected* or *unknown*,
+preserving the reason; a human confirms before the classification is written to the Work Item.
+
 ## Derived tools (write only under `.kaddo/`)
 
 When a derived artifact is missing or stale, these tools regenerate it in place — using the same

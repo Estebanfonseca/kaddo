@@ -21,6 +21,7 @@ import {
   type LifecycleState,
 } from './lifecycle.js'
 import { parseWorkItemSource, type WorkItemSource } from './work-item-source.js'
+import { loadSystemTopology } from './system-topology.js'
 
 // --- Public types ------------------------------------------------------------
 
@@ -105,7 +106,15 @@ export type WorkItemDetail = WorkItemListItem & {
   path: string
   /** How far the Work Item has been refined (independent of lifecycle). */
   refinement: RefinementStatus
+  /** Graph-assisted impact (VS-101): semantic system entities the agent classified. */
+  affectedSystemEntities: SystemImpactEntity[]
+  reviewedSystemEntities: ReviewedSystemEntity[]
+  /** The topology revision the impact analysis was performed against, when recorded. */
+  graphRevision: string | null
 }
+
+export type SystemImpactEntity = { id: string; nodeId: string; label: string; kind: string; moduleId: string | null }
+export type ReviewedSystemEntity = SystemImpactEntity & { status: string; reason: string | null }
 
 /**
  * Refinement status — a deterministic, presentation-only signal of how much end-to-end scope the
@@ -257,8 +266,30 @@ export function getWorkItem(dir: string, workItemId: string): WorkItemDetail {
     relatedKnowledge: parseRelatedKnowledge(fm, knowledgeById),
     source: parseWorkItemSource(fm),
     path: match.relPath,
+    ...parseSystemImpact(dir, fm),
   }
   return { ...detail, refinement: computeRefinementStatus(detail) }
+}
+
+/** Resolve the Work Item's declared system-impact ids against the semantic topology. */
+function parseSystemImpact(dir: string, fm: Record<string, unknown>): { affectedSystemEntities: SystemImpactEntity[]; reviewedSystemEntities: ReviewedSystemEntity[]; graphRevision: string | null } {
+  const topology = loadSystemTopology(dir)
+  const byId = new Map(topology.entities.map((e) => [e.id, e]))
+  const resolve = (id: string): SystemImpactEntity => {
+    const e = byId.get(id)
+    return { id, nodeId: `sys:${id}`, label: e?.label ?? id, kind: e?.kind ?? 'unknown', moduleId: e?.moduleId ?? null }
+  }
+  const affected = Array.isArray(fm.affected_system_entities)
+    ? fm.affected_system_entities.map(String).filter(Boolean).map(resolve)
+    : []
+  const reviewed = Array.isArray(fm.reviewed_system_entities)
+    ? (fm.reviewed_system_entities as unknown[])
+        .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === 'object')
+        .map((r) => ({ ...resolve(String(r.id ?? '')), status: String(r.status ?? 'unknown'), reason: r.reason ? String(r.reason) : null }))
+        .filter((r) => r.id)
+    : []
+  const graphRevision = typeof fm.graph_revision === 'string' && fm.graph_revision.trim() ? fm.graph_revision.trim() : null
+  return { affectedSystemEntities: affected, reviewedSystemEntities: reviewed, graphRevision }
 }
 
 // --- Body parsing ------------------------------------------------------------

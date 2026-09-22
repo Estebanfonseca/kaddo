@@ -31,8 +31,9 @@ const systemRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/system',
   component: System,
-  validateSearch: (search: Record<string, unknown>): { node?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { node?: string; workItem?: string } => ({
     node: typeof search.node === 'string' ? search.node : undefined,
+    workItem: typeof search.workItem === 'string' ? search.workItem : undefined,
   }),
 })
 

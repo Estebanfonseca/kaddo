@@ -1,23 +1,34 @@
 import { Handle, Position } from '@xyflow/react'
 import type { SystemMapNode } from '../../lib/api'
-import { nodeCategory, DIMENSION_META } from '../../lib/systemMap'
+import { nodeCategory, DIMENSION_META, type ImpactClass } from '../../lib/systemMap'
 
-type Data = { node: SystemMapNode; selected: boolean }
+type Data = { node: SystemMapNode; selected: boolean; impact?: ImpactClass | null; dimmed?: boolean }
+
+// Impact overlay tones (VS-101). Color reinforces a label that is always present, never the only signal.
+const IMPACT_META: Record<ImpactClass, { tone: string; label: string }> = {
+  affected: { tone: 'var(--danger)', label: 'Affected' },
+  reviewed: { tone: 'var(--foreground-muted)', label: 'Reviewed · not affected' },
+  unknown: { tone: 'var(--warning)', label: 'Unknown' },
+}
 
 /** A single system element. Type/status/dimension are conveyed by label + text + border, not color alone. */
 export function SystemNode({ data }: { data: Data }) {
-  const { node, selected } = data
+  const { node, selected, impact, dimmed } = data
   const cat = nodeCategory(node.type)
   const dim = DIMENSION_META[node.dimension]
+  const im = impact ? IMPACT_META[impact] : null
   return (
     <div
       style={{
         width: 190, minHeight: 58, boxSizing: 'border-box',
         background: 'var(--surface)',
-        border: `1px ${dim.border} ${selected ? 'var(--primary)' : 'var(--border)'}`,
+        border: `1px ${dim.border} ${selected ? 'var(--primary)' : im ? im.tone : 'var(--border)'}`,
         borderLeft: `4px solid ${cat.tone}`,
         borderRadius: 'var(--radius)',
-        boxShadow: selected ? '0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent)' : 'none',
+        boxShadow: selected
+          ? '0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent)'
+          : im ? `0 0 0 2px color-mix(in srgb, ${im.tone} 45%, transparent)` : 'none',
+        opacity: dimmed ? 0.4 : 1,
         padding: '8px 10px', overflow: 'hidden',
       }}
     >
@@ -28,6 +39,9 @@ export function SystemNode({ data }: { data: Data }) {
         {node.moduleId && <span className="font-mono" style={{ fontSize: 10, color: 'var(--foreground-muted)' }}>{node.moduleId}</span>}
         {node.status && <span style={{ fontSize: 10, color: 'var(--foreground-muted)' }}>· {node.status}</span>}
       </div>
+      {im && (
+        <div style={{ marginTop: 4, fontSize: 10, fontWeight: 700, color: im.tone }}>{im.label}</div>
+      )}
       <Handle type="source" position={Position.Bottom} style={{ background: 'var(--border-strong)', width: 6, height: 6 }} />
     </div>
   )

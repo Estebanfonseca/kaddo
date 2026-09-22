@@ -31,6 +31,13 @@ import {
   modulesDiscoverTool,
 } from './multirepo.js'
 import {
+  systemSearchTool,
+  systemNodeTool,
+  systemNeighborsTool,
+  systemPathsTool,
+  systemImpactCandidatesTool,
+} from './system.js'
+import {
   generateContext,
   generateExplain,
   generateUnderstand,
@@ -275,6 +282,69 @@ export function createServer(root: string): McpServer {
       },
     },
     async (args) => toolText(guarded(root, () => modulesDiscoverTool(root, args)))
+  )
+
+  // --- System Graph traversal (read-only, VS-101) ---
+  const CANDIDATE_DESC =
+    'Read-only. Results are IMPACT CANDIDATES to inspect in the repository, never confirmed scope; a missing edge does not mean no impact.'
+  server.registerTool(
+    'kaddo_system_search',
+    {
+      title: 'Search system entities',
+      description: `Search the semantic system topology by label / kind / module / purpose (concepts before implementation). ${CANDIDATE_DESC}`,
+      inputSchema: { query: z.string() },
+    },
+    async (args) => toolText(guarded(root, () => systemSearchTool(root, args)))
+  )
+  server.registerTool(
+    'kaddo_system_node',
+    {
+      title: 'Get system entity context',
+      description: `Resolve one system entity plus its incoming and outgoing relationships. ${CANDIDATE_DESC}`,
+      inputSchema: { nodeId: z.string() },
+    },
+    async (args) => toolText(guarded(root, () => systemNodeTool(root, args)))
+  )
+  server.registerTool(
+    'kaddo_system_neighbors',
+    {
+      title: 'Get bounded system neighborhood',
+      description: `Bounded BFS neighborhood around a seed entity (maxDepth/maxNodes, optional relationshipTypes/moduleId). Reports truncation. ${CANDIDATE_DESC}`,
+      inputSchema: {
+        nodeId: z.string(),
+        maxDepth: z.number().int().positive().optional(),
+        maxNodes: z.number().int().positive().optional(),
+        relationshipTypes: z.array(z.string()).optional(),
+        moduleId: z.string().optional(),
+      },
+    },
+    async (args) => toolText(guarded(root, () => systemNeighborsTool(root, args)))
+  )
+  server.registerTool(
+    'kaddo_system_paths',
+    {
+      title: 'Find system paths',
+      description: `Directed, acyclic, bounded paths between two system entities. ${CANDIDATE_DESC}`,
+      inputSchema: { from: z.string(), to: z.string(), maxDepth: z.number().int().positive().optional() },
+    },
+    async (args) => toolText(guarded(root, () => systemPathsTool(root, args)))
+  )
+  server.registerTool(
+    'kaddo_system_impact_candidates',
+    {
+      title: 'Get graph-assisted impact candidates',
+      description:
+        `Graph-assisted IMPACT CANDIDATES reachable from one or more seed entities, with reasons and graph paths. ` +
+        `Widens what to investigate before deciding scope; it never decides scope, mutates the Work Item, runs an LLM or touches git. ${CANDIDATE_DESC}`,
+      inputSchema: {
+        seeds: z.array(z.string()),
+        maxDepth: z.number().int().positive().optional(),
+        maxNodes: z.number().int().positive().optional(),
+        relationshipTypes: z.array(z.string()).optional(),
+        moduleId: z.string().optional(),
+      },
+    },
+    async (args) => toolText(guarded(root, () => systemImpactCandidatesTool(root, args)))
   )
 
   // --- Per-skill resources (kaddo://skills/<id>) — VS-059 ---

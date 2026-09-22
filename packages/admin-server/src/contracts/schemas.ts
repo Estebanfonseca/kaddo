@@ -190,6 +190,19 @@ const LinkedDecisionSchema = z.object({
 })
 const LinkedKnowledgeSchema = z.object({ id: z.string(), title: z.string(), layer: z.string() })
 
+// System impact on a Work Item (VS-101). Resolved against the semantic topology; read-only.
+const SystemImpactEntitySchema = z.object({
+  id: z.string(),
+  nodeId: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  moduleId: z.string().nullable(),
+})
+const ReviewedSystemEntitySchema = SystemImpactEntitySchema.extend({
+  status: z.string(),
+  reason: z.string().nullable(),
+})
+
 export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
   summary: z.string().nullable(),
   actor: z.string().nullable(),
@@ -208,6 +221,9 @@ export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
   completionExceptions: z.array(CompletionExceptionEntrySchema),
   decisions: z.array(LinkedDecisionSchema),
   relatedKnowledge: z.array(LinkedKnowledgeSchema),
+  affectedSystemEntities: z.array(SystemImpactEntitySchema),
+  reviewedSystemEntities: z.array(ReviewedSystemEntitySchema),
+  graphRevision: z.string().nullable(),
   source: z.object({ type: z.string(), id: z.string().optional(), inferred: z.boolean() }).passthrough(),
   path: z.string(),
   refinement: z.object({

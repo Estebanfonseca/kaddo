@@ -14,6 +14,7 @@ import { ImplementationEvidence } from '../components/ImplementationEvidence'
 import { ReleaseGates } from '../components/ReleaseGates'
 import { ArtifactPath } from '../components/ArtifactPath'
 import { RefinementHandoffCard } from '../components/RefinementHandoffCard'
+import { SystemImpact } from '../components/SystemImpact'
 import { humanize, presentWorkItemType } from '../lib/presentation'
 
 function Skeleton() {
@@ -176,6 +177,15 @@ export function WorkItemDetail() {
           </div>
         </Section>
       )}
+
+      {/* System impact (VS-101) — graph-assisted, confirmed classification */}
+      <SystemImpact
+        workItemId={wi.id}
+        affected={wi.affectedSystemEntities}
+        reviewed={wi.reviewedSystemEntities}
+        graphRevision={wi.graphRevision}
+        refined={wi.refinement.status === 'refined'}
+      />
 
       {/* Module coverage */}
       {wi.moduleCoverage.length > 0 && (

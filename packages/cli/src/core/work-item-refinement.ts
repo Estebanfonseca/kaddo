@@ -15,6 +15,7 @@ import {
 import { loadConfig } from './config.js'
 import { loadMappedModules } from '../services/mapped-modules.js'
 import { getWorkItem, type RefinementStatus } from './work-items.js'
+import { getSystemMapProjection } from './system-map.js'
 
 // --- Capture parity ----------------------------------------------------------
 
@@ -85,12 +86,30 @@ export function buildRefinementHandoff(dir: string, workItemId: string): Refinem
       'before finalizing affected_modules and module_coverage.',
     )
   }
+
+  // Graph-assisted impact guidance (VS-101).
+  const topology = getSystemMapProjection(dir).metadata.topologyStatus
+  if (topology !== 'unavailable') {
+    lines.push(
+      '',
+      `The semantic system Graph is ${topology}. Identify the relevant system entry points, then use`,
+      'the Kaddo Graph (search / neighbors / paths) to find connected components, dependencies, APIs,',
+      'datastores and external systems. Treat Graph-derived entities as IMPACT CANDIDATES, not',
+      'confirmed scope: inspect each candidate in the repository and classify it as affected,',
+      'reviewed-not-affected or unknown, preserving the reason/evidence. A missing Graph edge does not',
+      'mean no impact — especially when coverage is partial.',
+    )
+  } else {
+    lines.push('', 'The semantic system Graph is not available yet; refine using the repository and Knowledge.')
+  }
+
   lines.push(
     '',
     `Update the canonical Work Item ${wi.id} with:`,
     '- current and target behavior;',
     '- the end-to-end flow (journey);',
     '- affected modules;',
+    '- affected system entities (affected_system_entities) and reviewed_system_entities;',
     '- module coverage;',
     '- impact analysis across the relevant surfaces;',
     '- scope confidence and open unknowns;',

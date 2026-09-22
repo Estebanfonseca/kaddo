@@ -150,10 +150,17 @@ export type WorkItemDetail = WorkItemListItem & {
   completionExceptions: CompletionExceptionEntry[]
   decisions: LinkedDecision[]
   relatedKnowledge: LinkedKnowledge[]
+  affectedSystemEntities: SystemImpactEntity[]
+  reviewedSystemEntities: ReviewedSystemEntity[]
+  graphRevision: string | null
   source: { type: string; id?: string; inferred: boolean }
   path: string
   refinement: RefinementStatus
 }
+
+// System impact on a Work Item (VS-101). Persisted by an agent+human, resolved against the topology.
+export type SystemImpactEntity = { id: string; nodeId: string; label: string; kind: string; moduleId: string | null }
+export type ReviewedSystemEntity = SystemImpactEntity & { status: string; reason: string | null }
 
 export type WorkItemInput = {
   title: string

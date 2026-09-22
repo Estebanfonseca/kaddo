@@ -11,8 +11,9 @@ import type { SystemMapProjection, SystemDimension } from '../lib/api'
 import { SystemNode, SystemGroupNode } from '../components/system/SystemNode'
 import { SystemDetails } from '../components/system/SystemDetails'
 import { TopologyStatus } from '../components/system/TopologyStatus'
+import { WorkItemImpactOverlay } from '../components/system/WorkItemImpactOverlay'
 import {
-  layoutSystemMap, toReactFlowNodes, toReactFlowEdges, searchNodes, nodeCategory,
+  layoutSystemMap, toReactFlowNodes, toReactFlowEdges, searchNodes, nodeCategory, type ImpactClass,
 } from '../lib/systemMap'
 
 const NODE_TYPES = { system: SystemNode, systemGroup: SystemGroupNode }
@@ -26,8 +27,25 @@ const inputStyle = { padding: '8px 12px', border: '1px solid var(--border)', bor
 function Canvas({ projection }: { projection: SystemMapProjection }) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const search = useSearch({ from: '/system' }) as { node?: string }
+  const search = useSearch({ from: '/system' }) as { node?: string; workItem?: string }
   const rf = useReactFlow()
+
+  // Work Item impact overlay (VS-101). Read the canonical Work Item and classify its confirmed
+  // system entities; the Graph highlights what was reviewed, it never decides scope here.
+  const workItemId = search.workItem ?? null
+  const { data: overlayWi } = useQuery({
+    queryKey: ['work-item', workItemId],
+    queryFn: () => api.getWorkItem(workItemId!),
+    enabled: workItemId != null,
+    retry: false,
+  })
+  const impactMap = useMemo<Map<string, ImpactClass> | undefined>(() => {
+    if (!workItemId || !overlayWi) return undefined
+    const m = new Map<string, ImpactClass>()
+    for (const e of overlayWi.affectedSystemEntities) m.set(e.nodeId, 'affected')
+    for (const r of overlayWi.reviewedSystemEntities) if (!m.has(r.nodeId)) m.set(r.nodeId, r.status === 'unknown' ? 'unknown' : 'reviewed')
+    return m
+  }, [workItemId, overlayWi])
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(search.node ?? null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
@@ -64,7 +82,7 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
   )
 
   const layout = useMemo(() => layoutSystemMap(filtered), [filtered])
-  const rfNodes = useMemo<RFNode[]>(() => toReactFlowNodes(filtered, layout, selectedNodeId), [filtered, layout, selectedNodeId])
+  const rfNodes = useMemo<RFNode[]>(() => toReactFlowNodes(filtered, layout, selectedNodeId, impactMap), [filtered, layout, selectedNodeId, impactMap])
   const rfEdges = useMemo<RFEdge[]>(() => toReactFlowEdges(filtered, selectedNodeId), [filtered, selectedNodeId])
 
   const focus = (id: string) => {
@@ -84,7 +102,7 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
 
   const selectNode = (id: string) => {
     setSelectedNodeId(id); setSelectedEdgeId(null)
-    router.navigate({ to: '/system', search: { node: id }, replace: true })
+    router.navigate({ to: '/system', search: { node: id, workItem: workItemId ?? undefined }, replace: true })
     focus(id)
   }
 
@@ -132,6 +150,16 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
         </div>
 
         <TopologyStatus metadata={projection.metadata} />
+
+        {workItemId && (
+          <WorkItemImpactOverlay
+            workItemId={workItemId}
+            wi={overlayWi ?? null}
+            topologyStatus={projection.metadata.topologyStatus}
+            onClear={() => router.navigate({ to: '/system', search: {}, replace: true })}
+            onSelectNode={selectNode}
+          />
+        )}
 
         {filtered.nodes.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--foreground-muted)', fontSize: 14 }}>No nodes match these filters.</div>
