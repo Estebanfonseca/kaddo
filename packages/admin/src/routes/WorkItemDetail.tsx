@@ -184,6 +184,7 @@ export function WorkItemDetail() {
         affected={wi.affectedSystemEntities}
         reviewed={wi.reviewedSystemEntities}
         graphRevision={wi.graphRevision}
+        graphCoverage={wi.graphCoverage}
         refined={wi.refinement.status === 'refined'}
       />
 

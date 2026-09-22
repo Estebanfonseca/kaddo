@@ -111,10 +111,29 @@ export type WorkItemDetail = WorkItemListItem & {
   reviewedSystemEntities: ReviewedSystemEntity[]
   /** The topology revision the impact analysis was performed against, when recorded. */
   graphRevision: string | null
+  /** Topology coverage at read time, so Admin never presents a missing edge as proof of no impact. */
+  graphCoverage: 'unavailable' | 'partial' | 'available'
 }
 
-export type SystemImpactEntity = { id: string; nodeId: string; label: string; kind: string; moduleId: string | null }
-export type ReviewedSystemEntity = SystemImpactEntity & { status: string; reason: string | null }
+/** Why a candidate surfaced from the Graph — the relationship and path, not the agent's reasoning. */
+export type SystemImpactGraphReason = { relationship: string | null; path: string[] }
+/**
+ * A system entity the agent reviewed (VS-101.1). Carries the explainability the UI renders:
+ * why it was reviewed (reason), how the Graph surfaced it (graphReason), what was found in the
+ * repository (evidenceRefs/evidenceSummary). None of this is chain-of-thought — it is evidence.
+ */
+export type SystemImpactEntity = {
+  id: string
+  nodeId: string
+  label: string
+  kind: string
+  moduleId: string | null
+  reason: string | null
+  graphReason: SystemImpactGraphReason | null
+  evidenceRefs: string[]
+  evidenceSummary: string | null
+}
+export type ReviewedSystemEntity = SystemImpactEntity & { status: string }
 
 /**
  * Refinement status — a deterministic, presentation-only signal of how much end-to-end scope the
@@ -272,24 +291,64 @@ export function getWorkItem(dir: string, workItemId: string): WorkItemDetail {
 }
 
 /** Resolve the Work Item's declared system-impact ids against the semantic topology. */
-function parseSystemImpact(dir: string, fm: Record<string, unknown>): { affectedSystemEntities: SystemImpactEntity[]; reviewedSystemEntities: ReviewedSystemEntity[]; graphRevision: string | null } {
+function parseGraphReason(v: unknown): SystemImpactGraphReason | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as Record<string, unknown>
+  const relationship = typeof o.relationship === 'string' && o.relationship.trim() ? o.relationship.trim() : null
+  const path = Array.isArray(o.path) ? o.path.map(String).filter(Boolean) : []
+  return relationship || path.length ? { relationship, path } : null
+}
+
+function parseExplain(o: Record<string, unknown>): Pick<SystemImpactEntity, 'reason' | 'graphReason' | 'evidenceRefs' | 'evidenceSummary'> {
+  const refs = Array.isArray(o.evidence) ? o.evidence : Array.isArray(o.evidence_refs) ? o.evidence_refs : []
+  return {
+    reason: typeof o.reason === 'string' && o.reason.trim() ? o.reason.trim() : null,
+    graphReason: parseGraphReason(o.graph_reason),
+    evidenceRefs: (refs as unknown[]).map(String).filter(Boolean),
+    evidenceSummary: typeof o.evidence_summary === 'string' && o.evidence_summary.trim() ? o.evidence_summary.trim() : null,
+  }
+}
+
+function emptyExplain(): Pick<SystemImpactEntity, 'reason' | 'graphReason' | 'evidenceRefs' | 'evidenceSummary'> {
+  return { reason: null, graphReason: null, evidenceRefs: [], evidenceSummary: null }
+}
+
+function parseSystemImpact(dir: string, fm: Record<string, unknown>): {
+  affectedSystemEntities: SystemImpactEntity[]
+  reviewedSystemEntities: ReviewedSystemEntity[]
+  graphRevision: string | null
+  graphCoverage: 'unavailable' | 'partial' | 'available'
+} {
   const topology = loadSystemTopology(dir)
   const byId = new Map(topology.entities.map((e) => [e.id, e]))
-  const resolve = (id: string): SystemImpactEntity => {
+  const resolve = (id: string): Omit<SystemImpactEntity, 'reason' | 'graphReason' | 'evidenceRefs' | 'evidenceSummary'> => {
     const e = byId.get(id)
     return { id, nodeId: `sys:${id}`, label: e?.label ?? id, kind: e?.kind ?? 'unknown', moduleId: e?.moduleId ?? null }
   }
-  const affected = Array.isArray(fm.affected_system_entities)
-    ? fm.affected_system_entities.map(String).filter(Boolean).map(resolve)
+  // affected_system_entities accepts a bare id (string) or an object carrying explainability.
+  const affected: SystemImpactEntity[] = Array.isArray(fm.affected_system_entities)
+    ? fm.affected_system_entities
+        .map((raw): SystemImpactEntity | null => {
+          if (typeof raw === 'string') return raw ? { ...resolve(raw), ...emptyExplain() } : null
+          if (raw && typeof raw === 'object') {
+            const o = raw as Record<string, unknown>
+            const id = String(o.id ?? '')
+            return id ? { ...resolve(id), ...parseExplain(o) } : null
+          }
+          return null
+        })
+        .filter((e): e is SystemImpactEntity => e != null)
     : []
-  const reviewed = Array.isArray(fm.reviewed_system_entities)
+  const reviewed: ReviewedSystemEntity[] = Array.isArray(fm.reviewed_system_entities)
     ? (fm.reviewed_system_entities as unknown[])
         .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === 'object')
-        .map((r) => ({ ...resolve(String(r.id ?? '')), status: String(r.status ?? 'unknown'), reason: r.reason ? String(r.reason) : null }))
+        .map((r) => ({ ...resolve(String(r.id ?? '')), ...parseExplain(r), status: String(r.status ?? 'unknown') }))
         .filter((r) => r.id)
     : []
   const graphRevision = typeof fm.graph_revision === 'string' && fm.graph_revision.trim() ? fm.graph_revision.trim() : null
-  return { affectedSystemEntities: affected, reviewedSystemEntities: reviewed, graphRevision }
+  const graphCoverage: 'unavailable' | 'partial' | 'available' =
+    topology.entities.length === 0 ? 'unavailable' : topology.relationships.length > 0 ? 'available' : 'partial'
+  return { affectedSystemEntities: affected, reviewedSystemEntities: reviewed, graphRevision, graphCoverage }
 }
 
 // --- Body parsing ------------------------------------------------------------

@@ -190,17 +190,26 @@ const LinkedDecisionSchema = z.object({
 })
 const LinkedKnowledgeSchema = z.object({ id: z.string(), title: z.string(), layer: z.string() })
 
-// System impact on a Work Item (VS-101). Resolved against the semantic topology; read-only.
+// System impact on a Work Item (VS-101 / VS-101.1). Resolved against the semantic topology; read-only.
+// Carries explainability (why reviewed, how the Graph surfaced it, repository evidence) — never
+// chain-of-thought.
+const SystemImpactGraphReasonSchema = z.object({
+  relationship: z.string().nullable(),
+  path: z.array(z.string()),
+})
 const SystemImpactEntitySchema = z.object({
   id: z.string(),
   nodeId: z.string(),
   label: z.string(),
   kind: z.string(),
   moduleId: z.string().nullable(),
+  reason: z.string().nullable(),
+  graphReason: SystemImpactGraphReasonSchema.nullable(),
+  evidenceRefs: z.array(z.string()),
+  evidenceSummary: z.string().nullable(),
 })
 const ReviewedSystemEntitySchema = SystemImpactEntitySchema.extend({
   status: z.string(),
-  reason: z.string().nullable(),
 })
 
 export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
@@ -224,6 +233,7 @@ export const WorkItemDetailSchema = WorkItemListItemSchema.extend({
   affectedSystemEntities: z.array(SystemImpactEntitySchema),
   reviewedSystemEntities: z.array(ReviewedSystemEntitySchema),
   graphRevision: z.string().nullable(),
+  graphCoverage: z.enum(['unavailable', 'partial', 'available']),
   source: z.object({ type: z.string(), id: z.string().optional(), inferred: z.boolean() }).passthrough(),
   path: z.string(),
   refinement: z.object({

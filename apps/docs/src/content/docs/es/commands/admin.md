@@ -35,6 +35,10 @@ El dashboard admin presenta una vista unificada del proyecto:
 - **Readiness** — nivel general de preparación y siguiente paso recomendado
 - **Ruta** — progreso a través de la ruta del proyecto con detalle paso a paso
 - **Findings** — hallazgos bloqueantes, de advertencia e informativos
+- **System Explorer** — la topología semántica del sistema como un grafo de solo lectura, con overlays de Knowledge, Delivery e Implementation
+- **Impacto de sistema del Work Item** — para un Work Item refinado, las entidades clasificadas como afectadas, revisadas-no-afectadas o desconocidas, cada una con su razón, razón del grafo y evidencia del repositorio; "View in System Explorer" proyecta ese impacto sobre el grafo
+
+La vista de impacto es asistida por el Graph, nunca autoritativa: el Graph amplía lo que el agente revisa, pero no decide el alcance. Cuando la cobertura de la topología es parcial o no está disponible, la UI lo indica explícitamente — una relación ausente en el Graph nunca se presenta como prueba de no-impacto.
 
 ## Arquitectura
 

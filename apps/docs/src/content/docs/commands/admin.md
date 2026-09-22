@@ -35,6 +35,10 @@ The admin dashboard displays a unified overview of the project:
 - **Readiness** — overall readiness level and recommended next step
 - **Route** — progress through the project route with step-by-step detail
 - **Findings** — blocking, warning and FYI findings
+- **System Explorer** — the semantic system topology as a read-only graph, with Knowledge, Delivery and Implementation overlays
+- **Work Item system impact** — for a refined Work Item, the entities classified as affected, reviewed-not-affected or unknown, each with its reason, graph reason and repository evidence; "View in System Explorer" projects that impact onto the graph
+
+The impact view is graph-assisted, never authoritative: the Graph widens what the agent reviews, but it does not decide scope. When topology coverage is partial or unavailable, the UI says so explicitly — a missing Graph relationship is never presented as proof of no impact.
 
 ## Architecture
 

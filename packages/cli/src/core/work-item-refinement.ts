@@ -73,11 +73,12 @@ export function buildRefinementHandoff(dir: string, workItemId: string): Refinem
   const lines: string[] = [
     `Refine Work Item ${wi.id} — "${wi.title}" — in project "${projectName}" using Kaddo.`,
     '',
-    'Use a Kaddo-enabled agent with access to this repository. Drive the refinement with the',
-    `canonical ${RECOMMENDED_AGENT} and the ${RECOMMENDED_SKILL} skill (via Kaddo MCP or skills).`,
+    `Use the canonical ${RECOMMENDED_AGENT} and the ${RECOMMENDED_SKILL} skill (via Kaddo MCP or skills),`,
+    'with access to this repository.',
     '',
-    'Inspect the actual implementation before defining scope — do not guess affected modules from',
-    'the Work Item title. Read the current behavior in the code first, then classify.',
+    'Inspect the actual implementation and the relevant mapped modules before defining the final scope —',
+    'do not guess affected modules from the Work Item title. Read the current behavior in the code first,',
+    'then classify.',
   ]
   if (multirepo) {
     lines.push(
@@ -87,20 +88,28 @@ export function buildRefinementHandoff(dir: string, workItemId: string): Refinem
     )
   }
 
-  // Graph-assisted impact guidance (VS-101).
+  // Graph-assisted impact guidance (VS-101 / VS-101.1).
   const topology = getSystemMapProjection(dir).metadata.topologyStatus
   if (topology !== 'unavailable') {
     lines.push(
       '',
-      `The semantic system Graph is ${topology}. Identify the relevant system entry points, then use`,
-      'the Kaddo Graph (search / neighbors / paths) to find connected components, dependencies, APIs,',
-      'datastores and external systems. Treat Graph-derived entities as IMPACT CANDIDATES, not',
-      'confirmed scope: inspect each candidate in the repository and classify it as affected,',
-      'reviewed-not-affected or unknown, preserving the reason/evidence. A missing Graph edge does not',
-      'mean no impact — especially when coverage is partial.',
+      `The semantic system Graph is ${topology}. When semantic system topology is available:`,
+      '1. identify the relevant system entry points;',
+      '2. query the Kaddo Graph (search / neighbors / paths) for connected entities;',
+      '3. treat Graph results as IMPACT CANDIDATES, not confirmed scope;',
+      '4. inspect the actual implementation in the repository for each relevant candidate;',
+      '5. classify each candidate as affected, reviewed-not-affected or unknown;',
+      '6. preserve the evidence and reasons behind each classification.',
+      '',
+      'A missing Graph relationship does not mean no impact, especially when Graph coverage is partial —',
+      'keep inspecting the repository beyond the Graph candidates when the task requires it.',
     )
   } else {
-    lines.push('', 'The semantic system Graph is not available yet; refine using the repository and Knowledge.')
+    lines.push(
+      '',
+      'The semantic system Graph is unavailable. Continue repository-driven refinement normally, using the',
+      'repository, Knowledge and mapped modules — the Graph is enrichment, not a prerequisite.',
+    )
   }
 
   lines.push(

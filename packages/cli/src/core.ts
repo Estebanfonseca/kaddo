@@ -30,6 +30,9 @@ export {
   type EvidenceRepo,
   type LinkedDecision,
   type LinkedKnowledge,
+  type SystemImpactEntity,
+  type ReviewedSystemEntity,
+  type SystemImpactGraphReason,
 } from './core/work-items.js'
 export {
   createWorkItem,

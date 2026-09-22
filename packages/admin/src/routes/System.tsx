@@ -100,6 +100,17 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Impact overlay: fit the view to the impacted entities so the Work Item's scope is centered,
+  // while unrelated nodes stay dimmed (not removed) for context. Runs once the impact map resolves.
+  useEffect(() => {
+    if (!impactMap || impactMap.size === 0) return
+    const ids = [...impactMap.keys()].filter((id) => layout.positions.has(id))
+    if (ids.length === 0) return
+    const t = setTimeout(() => rf.fitView({ nodes: ids.map((id) => ({ id })), duration: 500, padding: 0.3, maxZoom: 1.4 }), 120)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [impactMap, layout])
+
   const selectNode = (id: string) => {
     setSelectedNodeId(id); setSelectedEdgeId(null)
     router.navigate({ to: '/system', search: { node: id, workItem: workItemId ?? undefined }, replace: true })

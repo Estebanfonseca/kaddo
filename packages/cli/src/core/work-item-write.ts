@@ -510,7 +510,12 @@ export function validateWorkItem(dir: string, id: string): ValidationResult {
   const topology = loadSystemTopology(dir)
   const entityById = new Map(topology.entities.map((e) => [e.id, e]))
   const fm = data as Record<string, unknown>
-  const affectedEntities = Array.isArray(fm.affected_system_entities) ? fm.affected_system_entities.map(String) : []
+  // Accept a bare id or an object carrying explainability (VS-101.1).
+  const idOf = (raw: unknown): string =>
+    typeof raw === 'string' ? raw : raw && typeof raw === 'object' ? String((raw as Record<string, unknown>).id ?? '') : ''
+  const affectedEntities = Array.isArray(fm.affected_system_entities)
+    ? fm.affected_system_entities.map(idOf).filter(Boolean)
+    : []
   for (const eid of affectedEntities) {
     const e = entityById.get(eid)
     if (!e) { findings.push({ level: 'blocking', message: `Affected system entity "${eid}" does not exist in the semantic topology.` }); continue }

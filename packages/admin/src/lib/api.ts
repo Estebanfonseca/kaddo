@@ -153,14 +153,28 @@ export type WorkItemDetail = WorkItemListItem & {
   affectedSystemEntities: SystemImpactEntity[]
   reviewedSystemEntities: ReviewedSystemEntity[]
   graphRevision: string | null
+  graphCoverage: GraphCoverage
   source: { type: string; id?: string; inferred: boolean }
   path: string
   refinement: RefinementStatus
 }
 
-// System impact on a Work Item (VS-101). Persisted by an agent+human, resolved against the topology.
-export type SystemImpactEntity = { id: string; nodeId: string; label: string; kind: string; moduleId: string | null }
-export type ReviewedSystemEntity = SystemImpactEntity & { status: string; reason: string | null }
+// System impact on a Work Item (VS-101 / VS-101.1). Persisted by an agent+human, resolved against
+// the topology. Carries explainability (why reviewed / graph reason / repository evidence).
+export type GraphCoverage = 'unavailable' | 'partial' | 'available'
+export type SystemImpactGraphReason = { relationship: string | null; path: string[] }
+export type SystemImpactEntity = {
+  id: string
+  nodeId: string
+  label: string
+  kind: string
+  moduleId: string | null
+  reason: string | null
+  graphReason: SystemImpactGraphReason | null
+  evidenceRefs: string[]
+  evidenceSummary: string | null
+}
+export type ReviewedSystemEntity = SystemImpactEntity & { status: string }
 
 export type WorkItemInput = {
   title: string

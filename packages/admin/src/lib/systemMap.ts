@@ -45,13 +45,27 @@ function humanizeType(type: string): string {
 
 export type SystemLayout = { positions: Map<string, { x: number; y: number }>; groupBoxes: Map<string, { x: number; y: number; w: number; h: number }> }
 
-/** Deterministic top-down layout via dagre; then a bounding box per module group. */
+/**
+ * Deterministic top-down layout via dagre. Module groups are laid out as real COMPOUND CLUSTERS so a
+ * module's members stay together and independent module boundaries never overlap (VS-101.1) — dagre
+ * keeps sibling clusters apart. A post-pass separates any boxes that still touch, as a hard guarantee.
+ */
 export function layoutSystemMap(projection: SystemMapProjection): SystemLayout {
-  const g = new dagre.graphlib.Graph()
+  const g = new dagre.graphlib.Graph({ compound: true })
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 70, marginx: 20, marginy: 20 })
   g.setDefaultEdgeLabel(() => ({}))
 
-  for (const n of projection.nodes) g.setNode(n.id, { width: NODE_W, height: NODE_H })
+  const groupIds = new Set(projection.groups.map((x) => x.id))
+  // A cluster node per module the projection declares members for.
+  const clusterOf = (moduleId?: string) => (moduleId && groupIds.has(moduleId) ? `cluster:${moduleId}` : null)
+  for (const group of projection.groups) {
+    if (projection.nodes.some((n) => n.moduleId === group.id)) g.setNode(`cluster:${group.id}`, { label: group.label })
+  }
+  for (const n of projection.nodes) {
+    g.setNode(n.id, { width: NODE_W, height: NODE_H })
+    const c = clusterOf(n.moduleId)
+    if (c) g.setParent(n.id, c)
+  }
   const nodeIds = new Set(projection.nodes.map((n) => n.id))
   for (const e of projection.relationships) {
     if (nodeIds.has(e.source) && nodeIds.has(e.target)) g.setEdge(e.source, e.target)
@@ -65,10 +79,21 @@ export function layoutSystemMap(projection: SystemMapProjection): SystemLayout {
     positions.set(n.id, { x: (p?.x ?? 0) - NODE_W / 2, y: (p?.y ?? 0) - NODE_H / 2 })
   }
 
+  // Group boxes from the cluster dimensions when dagre provides them; else a member bounding box.
   const groupBoxes = new Map<string, { x: number; y: number; w: number; h: number }>()
   for (const group of projection.groups) {
     const members = projection.nodes.filter((n) => n.moduleId === group.id)
     if (members.length === 0) continue
+    const c = g.node(`cluster:${group.id}`) as { x?: number; y?: number; width?: number; height?: number } | undefined
+    if (c && typeof c.width === 'number' && typeof c.height === 'number') {
+      groupBoxes.set(group.id, {
+        x: c.x! - c.width / 2 - GROUP_PAD,
+        y: c.y! - c.height / 2 - GROUP_PAD - GROUP_HEADER,
+        w: c.width + GROUP_PAD * 2,
+        h: c.height + GROUP_PAD * 2 + GROUP_HEADER,
+      })
+      continue
+    }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     for (const m of members) {
       const p = positions.get(m.id)!
@@ -81,7 +106,36 @@ export function layoutSystemMap(projection: SystemMapProjection): SystemLayout {
     })
   }
 
+  separateGroupBoxes(groupBoxes, positions, projection)
   return { positions, groupBoxes }
+}
+
+/**
+ * Hard guarantee that independent module boundaries do not overlap: if two boxes intersect, push the
+ * right-most module (and its member nodes, so edges follow) horizontally until they clear. Independent
+ * of dagre's cluster separation, so the invariant holds even in degenerate graphs.
+ */
+function separateGroupBoxes(
+  groupBoxes: Map<string, { x: number; y: number; w: number; h: number }>,
+  positions: Map<string, { x: number; y: number }>,
+  projection: SystemMapProjection,
+): void {
+  const GAP = 24
+  const ids = [...groupBoxes.keys()].sort((a, b) => groupBoxes.get(a)!.x - groupBoxes.get(b)!.x)
+  const intersects = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const A = groupBoxes.get(ids[i])!, B = groupBoxes.get(ids[j])!
+      if (!intersects(A, B)) continue
+      const shift = A.x + A.w + GAP - B.x
+      if (shift <= 0) continue
+      B.x += shift
+      for (const n of projection.nodes) {
+        if (n.moduleId === ids[j]) { const p = positions.get(n.id); if (p) p.x += shift }
+      }
+    }
+  }
 }
 
 /** Group background nodes first (render behind), then data nodes. */
