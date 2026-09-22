@@ -23,6 +23,7 @@ import {
   transitionWorkItemAdmin,
   getCaptureDefinition,
   getRefinementHandoff,
+  getSystemMap,
   CoreError,
 } from './core-adapter.js'
 import {
@@ -221,6 +222,7 @@ export async function createAdminServer(opts: AdminServerOptions) {
   app.get('/api/v1/admin/readiness', coreRoute(getProjectReadiness))
   app.get('/api/v1/admin/route', coreRoute(getProjectRoute))
   app.get('/api/v1/admin/findings', coreRoute(getFindings))
+  app.get('/api/v1/admin/system', coreRoute(getSystemMap))
   app.get('/api/v1/admin/knowledge/inventory', coreRoute(getKnowledgeInventory))
   app.get<{ Params: { artifactId: string } }>('/api/v1/admin/knowledge/artifact/:artifactId', async (request) => {
     try {

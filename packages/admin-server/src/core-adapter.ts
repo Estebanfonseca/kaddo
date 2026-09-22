@@ -17,6 +17,7 @@ import {
   transitionWorkItem as coreTransitionWorkItem,
   getWorkItemCaptureDefinition as coreGetCaptureDefinition,
   buildRefinementHandoff as coreBuildRefinementHandoff,
+  getSystemMapProjection as coreGetSystemMapProjection,
   WorkItemWriteError,
   exists,
   join,
@@ -41,6 +42,7 @@ import type {
   WorkItemInput,
   ValidationResult,
   WorkItemWriteResult,
+  SystemMapProjection,
 } from './contracts/schemas.js'
 
 export function getProjectSummary(dir: string): ProjectSummary {
@@ -124,6 +126,10 @@ function mapWriteError(err: unknown): never {
 
 export function getCaptureDefinition(): ReturnType<typeof coreGetCaptureDefinition> {
   return coreGetCaptureDefinition()
+}
+
+export function getSystemMap(dir: string): SystemMapProjection {
+  return coreGetSystemMapProjection(dir) as SystemMapProjection
 }
 
 export function getRefinementHandoff(dir: string, workItemId: string): ReturnType<typeof coreBuildRefinementHandoff> {

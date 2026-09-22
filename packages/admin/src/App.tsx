@@ -9,6 +9,7 @@ import { WorkItems } from './routes/WorkItems'
 import { WorkItemDetail } from './routes/WorkItemDetail'
 import { WorkItemNew } from './routes/WorkItemNew'
 import { WorkItemEditor } from './routes/WorkItemEditor'
+import { System } from './routes/System'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -22,21 +23,18 @@ const knowledgeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/kn
 const knowledgeLayerRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge/$layer', component: KnowledgeLayer })
 const knowledgeArtifactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge/$layer/$artifactId', component: KnowledgeArtifact })
 
-function PlaceholderRoute({ title }: { title: string }) {
-  return (
-    <div style={{ padding: '48px 32px', textAlign: 'center', color: 'var(--foreground-muted)' }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>🚧</div>
-      <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 8px', color: 'var(--foreground)' }}>{title}</h2>
-      <p style={{ fontSize: 14 }}>Coming soon</p>
-    </div>
-  )
-}
-
 const workItemsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items', component: WorkItems })
 const workItemNewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items/new', component: WorkItemNew })
 const workItemDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items/$workItemId', component: WorkItemDetail })
 const workItemEditRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work-items/$workItemId/edit', component: WorkItemEditor })
-const systemRoute = createRoute({ getParentRoute: () => rootRoute, path: '/system', component: () => <PlaceholderRoute title="System" /> })
+const systemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/system',
+  component: System,
+  validateSearch: (search: Record<string, unknown>): { node?: string } => ({
+    node: typeof search.node === 'string' ? search.node : undefined,
+  }),
+})
 
 const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, knowledgeLayerRoute, knowledgeArtifactRoute, workItemsRoute, workItemNewRoute, workItemDetailRoute, workItemEditRoute, systemRoute])
 const router = createRouter({ routeTree })

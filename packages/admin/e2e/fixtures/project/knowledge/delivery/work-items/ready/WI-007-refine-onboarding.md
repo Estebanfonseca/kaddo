@@ -4,6 +4,9 @@ title: Refine onboarding checklist
 type: feature
 status: ready
 affected_modules: [frontend]
+code: ["src/onboarding/**"]
+capabilities: ["User onboarding"]
+decisions: [ADR-004]
 scope_confidence:
   level: high
   reasons:

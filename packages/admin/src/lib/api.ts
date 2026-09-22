@@ -208,6 +208,28 @@ export type RefinementHandoff = {
   text: string
 }
 
+// --- System Map (VS-100) -----------------------------------------------------
+
+export type SystemMapNode = {
+  id: string
+  type: string
+  label: string
+  status?: string
+  path?: string
+  workItemRef?: string
+  knowledgeRef?: { id: string; layer: string }
+  moduleId?: string
+}
+export type SystemMapRelationship = { id: string; source: string; target: string; type: string; label: string }
+export type SystemMapGroup = { id: string; label: string; repositoryId: string; available: boolean }
+export type SystemMapProjection = {
+  system: { name: string }
+  nodes: SystemMapNode[]
+  relationships: SystemMapRelationship[]
+  groups: SystemMapGroup[]
+  metadata: { projectName: string; structure: string; nodeCount: number; relationshipCount: number; coverage: 'good' | 'partial' | 'sparse' | 'empty'; available: boolean }
+}
+
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
 function toQuery(filters: WorkItemFilters): string {
@@ -228,6 +250,7 @@ export const api = {
   getReadiness: () => fetchApi<ProjectOverview['readiness']>('/readiness'),
   getRoute: () => fetchApi<ProjectOverview['route']>('/route'),
   getFindings: () => fetchApi<ProjectOverview['findings']>('/findings'),
+  getSystemMap: () => fetchApi<SystemMapProjection>('/system'),
   getKnowledgeInventory: () => fetchApi<KnowledgeInventory>('/knowledge/inventory'),
   getKnowledgeArtifact: (artifactId: string) => fetchApi<KnowledgeArtifactDetail>(`/knowledge/artifact/${encodeURIComponent(artifactId)}`),
   getWorkItemsList: (filters: WorkItemFilters = {}) => fetchApi<WorkItemsList>(`/work-items${toQuery(filters)}`),

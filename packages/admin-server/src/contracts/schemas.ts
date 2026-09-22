@@ -281,6 +281,49 @@ export const WorkItemCreateWithAnswersSchema = z.object({
   answers: z.record(z.string(), z.string()).optional(),
 })
 
+// --- System Map (VS-100) -----------------------------------------------------
+
+export const SystemMapNodeSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  label: z.string(),
+  status: z.string().optional(),
+  path: z.string().optional(),
+  workItemRef: z.string().optional(),
+  knowledgeRef: z.object({ id: z.string(), layer: z.string() }).optional(),
+  moduleId: z.string().optional(),
+})
+
+export const SystemMapRelationshipSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  target: z.string(),
+  type: z.string(),
+  label: z.string(),
+})
+
+export const SystemMapGroupSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  repositoryId: z.string(),
+  available: z.boolean(),
+})
+
+export const SystemMapProjectionSchema = z.object({
+  system: z.object({ name: z.string() }),
+  nodes: z.array(SystemMapNodeSchema),
+  relationships: z.array(SystemMapRelationshipSchema),
+  groups: z.array(SystemMapGroupSchema),
+  metadata: z.object({
+    projectName: z.string(),
+    structure: z.string(),
+    nodeCount: z.number(),
+    relationshipCount: z.number(),
+    coverage: z.enum(['good', 'partial', 'sparse', 'empty']),
+    available: z.boolean(),
+  }),
+})
+
 export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
@@ -305,4 +348,5 @@ export type WorkItemInput = z.infer<typeof WorkItemInputSchema>
 export type WorkItemEditModel = z.infer<typeof WorkItemEditModelSchema>
 export type ValidationResult = z.infer<typeof ValidationResultSchema>
 export type WorkItemWriteResult = z.infer<typeof WorkItemWriteResultSchema>
+export type SystemMapProjection = z.infer<typeof SystemMapProjectionSchema>
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>

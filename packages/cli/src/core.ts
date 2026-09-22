@@ -55,4 +55,12 @@ export {
   type RefinementHandoff,
 } from './core/work-item-refinement.js'
 export { computeRefinementStatus, type RefinementStatus } from './core/work-items.js'
+export {
+  getSystemMapProjection,
+  type SystemMapProjection,
+  type SystemMapNode,
+  type SystemMapRelationship,
+  type SystemMapGroup,
+  type SystemMapMetadata,
+} from './core/system-map.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'
