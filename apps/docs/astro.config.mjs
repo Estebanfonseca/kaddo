@@ -136,6 +136,7 @@ export default defineConfig({
             { label: 'ready', slug: 'commands/ready' },
             { label: 'guard', slug: 'commands/guard' },
             { label: 'explain', slug: 'commands/explain' },
+            { label: 'admin', slug: 'commands/admin' },
           ],
         },
         {
