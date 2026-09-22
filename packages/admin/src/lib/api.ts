@@ -186,6 +186,39 @@ export type ValidationFinding = { level: 'blocking' | 'warning' | 'fyi'; message
 export type ValidationResult = { findings: ValidationFinding[]; canMarkReady: boolean }
 export type WorkItemWriteResult = { id: string; path: string; revision: string; status?: string }
 
+// --- Refinement (VS-099.1) ---------------------------------------------------
+
+export type CaptureQuestion = { id: string; prompt: string; placeholder: string; field: string; required: boolean }
+export type WorkItemCaptureDefinition = { types: { value: string; label: string }[]; questions: Record<string, CaptureQuestion[]> }
+
+export type RefinementProposal = {
+  title?: string
+  outcome?: { actor?: string; observableOutcome?: string; currentBehavior?: string; targetBehavior?: string }
+  journey?: { entryPoints?: string[]; flow?: string[] }
+  affectedModules?: string[]
+  moduleCoverage?: { id: string; status: string; reason?: string }[]
+  impactAnalysis?: { surface: string; status: string; reason?: string; question?: string }[]
+  scopeConfidence?: { level: string; reasons?: string[] }
+  scopeUnknowns?: string[]
+  acceptanceCriteria?: string[]
+  linkedDecisions?: string[]
+  relatedKnowledge?: string[]
+}
+
+export type RefinementValidation = { findings: ValidationFinding[]; blocking: number; warning: number; fyi: number; canApply: boolean }
+
+export type RefinementSession = {
+  refinementId: string
+  workItemId: string
+  sourceRevision: string
+  status: 'ready-for-review' | 'failed' | 'stale' | 'applied'
+  intent: string
+  proposal: RefinementProposal
+  validation: RefinementValidation
+  contextUsed: { id: string; title: string; layer: string }[]
+  meta: { provider: string; model?: string; durationMs: number; inputTokens?: number; outputTokens?: number; repairAttempts?: number }
+}
+
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
 function toQuery(filters: WorkItemFilters): string {
@@ -211,7 +244,8 @@ export const api = {
   getWorkItemsList: (filters: WorkItemFilters = {}) => fetchApi<WorkItemsList>(`/work-items${toQuery(filters)}`),
   getWorkItem: (workItemId: string) => fetchApi<WorkItemDetail>(`/work-items/${encodeURIComponent(workItemId)}`),
   // Writes (VS-099)
-  createWorkItem: (intent: string, type: string) => mutateApi<WorkItemWriteResult>('/work-items', 'POST', { intent, type }),
+  getCaptureDefinition: () => fetchApi<WorkItemCaptureDefinition>('/work-items-capture'),
+  createWorkItem: (intent: string, type: string, answers?: Record<string, string>) => mutateApi<WorkItemWriteResult>('/work-items', 'POST', { intent, type, ...(answers ? { answers } : {}) }),
   getWorkItemEdit: (workItemId: string) => fetchApi<WorkItemEditModel>(`/work-items/${encodeURIComponent(workItemId)}/edit`),
   updateWorkItem: (workItemId: string, model: WorkItemInput, expectedRevision: string) =>
     mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}`, 'PUT', { model, expectedRevision }),
@@ -220,4 +254,11 @@ export const api = {
     mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/transitions/ready`, 'POST', { expectedRevision }),
   transitionDraft: (workItemId: string, expectedRevision: string) =>
     mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/transitions/draft`, 'POST', { expectedRevision }),
+  // Refinement (VS-099.1)
+  startRefinement: (workItemId: string) =>
+    mutateApi<RefinementSession>(`/work-items/${encodeURIComponent(workItemId)}/refinement`, 'POST'),
+  refinementFeedback: (workItemId: string, refinementId: string, feedback: string) =>
+    mutateApi<RefinementSession>(`/work-items/${encodeURIComponent(workItemId)}/refinement/feedback`, 'POST', { refinementId, feedback }),
+  applyRefinement: (workItemId: string, refinementId: string, expectedRevision: string) =>
+    mutateApi<WorkItemWriteResult>(`/work-items/${encodeURIComponent(workItemId)}/refinement/apply`, 'POST', { refinementId, expectedRevision }),
 }

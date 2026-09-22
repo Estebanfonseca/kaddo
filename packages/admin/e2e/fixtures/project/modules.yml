@@ -1,0 +1,4 @@
+modules:
+  - id: frontend
+    path: ../frontend
+    role: module

@@ -379,7 +379,33 @@ export function getWorkItemForEdit(dir: string, id: string): WorkItemEditModel {
 
 // --- Create ------------------------------------------------------------------
 
-export function createWorkItem(dir: string, opts: { intent: string; type: string }): { id: string; path: string; revision: string } {
+// Capture answers (from the shared capture definition) map to these body sections, matching the
+// CLI's create flow. Anything the capture flow does not cover belongs to refinement.
+const CAPTURE_SECTIONS: { field: string; heading: string; list?: boolean }[] = [
+  { field: 'problem', heading: 'Problem' },
+  { field: 'expected_result', heading: 'Expected result' },
+  { field: 'impact', heading: 'Impact' },
+  { field: 'acceptance_criteria', heading: 'Acceptance criteria', list: true },
+  { field: 'design', heading: 'Design' },
+  { field: 'risks', heading: 'Risks' },
+]
+
+function captureBody(title: string, type: string, answers: Record<string, string>): string {
+  const out: string[] = [`# ${title}`, '', `> Type: ${type}`]
+  for (const { field, heading, list } of CAPTURE_SECTIONS) {
+    const value = answers[field]?.trim()
+    if (!value) continue
+    if (list) {
+      const items = value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => (/^[-*+]\s/.test(l) ? l : `- ${l}`))
+      out.push('', `## ${heading}`, '', items.join('\n'))
+    } else {
+      out.push('', `## ${heading}`, '', value)
+    }
+  }
+  return out.join('\n') + '\n'
+}
+
+export function createWorkItem(dir: string, opts: { intent: string; type: string; answers?: Record<string, string> }): { id: string; path: string; revision: string } {
   const intent = opts.intent.trim()
   if (!intent) throw new WorkItemWriteError('INVALID_INPUT', 'An intent or summary is required.')
   const type = opts.type.trim() || 'feature'
@@ -400,12 +426,15 @@ export function createWorkItem(dir: string, opts: { intent: string; type: string
     affected_modules: [],
     summary: intent,
   }
-  const input: WorkItemInput = {
-    title, type, summary: intent,
-    scopeUnknowns: [], affectedModules: [], moduleCoverage: [], impactAnalysis: [],
-    acceptanceCriteria: [], decisions: [], relatedKnowledge: [], scopeConfidence: null,
-  }
-  const body = freshBody(input)
+  const answers = opts.answers ?? {}
+  const hasAnswers = Object.values(answers).some((v) => v?.trim())
+  const body = hasAnswers
+    ? captureBody(title, type, answers)
+    : freshBody({
+        title, type, summary: intent,
+        scopeUnknowns: [], affectedModules: [], moduleCoverage: [], impactAnalysis: [],
+        acceptanceCriteria: [], decisions: [], relatedKnowledge: [], scopeConfidence: null,
+      })
   const relPath = `${WORK_ITEMS_DIR}/draft/${id}-${slugify(title)}.md`
   const filePath = join(dir, relPath)
   if (exists(filePath)) throw new WorkItemWriteError('INVALID_INPUT', `Work Item file already exists: ${relPath}`)

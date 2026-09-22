@@ -15,6 +15,7 @@ import {
   getWorkItemForEdit as coreGetWorkItemForEdit,
   validateWorkItem as coreValidateWorkItem,
   transitionWorkItem as coreTransitionWorkItem,
+  getWorkItemCaptureDefinition as coreGetCaptureDefinition,
   WorkItemWriteError,
   exists,
   join,
@@ -119,9 +120,13 @@ function mapWriteError(err: unknown): never {
   throw err as Error
 }
 
-export function createWorkItemAdmin(dir: string, body: { intent: string; type: string }): WorkItemWriteResult {
+export function getCaptureDefinition(): ReturnType<typeof coreGetCaptureDefinition> {
+  return coreGetCaptureDefinition()
+}
+
+export function createWorkItemAdmin(dir: string, body: { intent: string; type: string; answers?: Record<string, string> }): WorkItemWriteResult {
   try {
-    const res = coreCreateWorkItem(dir, { intent: body.intent, type: body.type })
+    const res = coreCreateWorkItem(dir, { intent: body.intent, type: body.type, answers: body.answers })
     return { id: res.id, path: res.path, revision: res.revision, status: 'draft' }
   } catch (err) { mapWriteError(err) }
 }

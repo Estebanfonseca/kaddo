@@ -11,7 +11,10 @@ test('create a draft, refine it, validate and mark ready', async ({ page }) => {
   await page.getByLabel('What needs to change?').fill('Add a saved-searches feature')
   await page.getByRole('button', { name: 'Create draft' }).click()
 
-  // Redirected to the editor for the new draft.
+  // Create lands on the refine screen (VS-099.1); open the structured editor from there.
+  await expect(page).toHaveURL(/\/work-items\/WI-\d+\/refine$/)
+  const id = page.url().match(/work-items\/(WI-\d+)\//)![1]
+  await page.goto(`/work-items/${id}/edit`)
   await expect(page).toHaveURL(/\/work-items\/WI-\d+\/edit$/)
   await expect(page.getByText('Add a saved-searches feature').first()).toBeVisible()
 
@@ -42,6 +45,9 @@ test('unsaved changes prompt appears when leaving the editor', async ({ page }) 
   await page.getByRole('button', { name: '+ Create Work Item' }).click()
   await page.getByLabel('What needs to change?').fill('Draft for unsaved test')
   await page.getByRole('button', { name: 'Create draft' }).click()
+  await expect(page).toHaveURL(/\/work-items\/WI-\d+\/refine$/)
+  const id = page.url().match(/work-items\/(WI-\d+)\//)![1]
+  await page.goto(`/work-items/${id}/edit`)
   await expect(page).toHaveURL(/\/work-items\/WI-\d+\/edit$/)
 
   await page.getByLabel('Actor').fill('Someone')

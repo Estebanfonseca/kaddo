@@ -268,6 +268,24 @@ export const WorkItemWriteResultSchema = z.object({
   status: z.string().optional(),
 })
 
+// --- Work Item refinement (VS-099.1) -----------------------------------------
+
+export const WorkItemCreateWithAnswersSchema = z.object({
+  intent: z.string().min(1),
+  type: z.string().min(1),
+  answers: z.record(z.string(), z.string()).optional(),
+})
+
+export const RefinementFeedbackSchema = z.object({
+  refinementId: z.string().min(1),
+  feedback: z.string().min(1),
+})
+
+export const RefinementApplySchema = z.object({
+  refinementId: z.string().min(1),
+  expectedRevision: z.string().min(1),
+})
+
 export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),

@@ -1,34 +1,32 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Labeled, SelectField, PrimaryButton } from '../components/editor/primitives'
 
-const TYPES = [
-  { value: 'feature', label: 'Feature' },
-  { value: 'bugfix', label: 'Bug fix' },
-  { value: 'hotfix', label: 'Hotfix' },
-  { value: 'spike', label: 'Spike' },
-  { value: 'chore', label: 'Chore' },
-  { value: 'refactor', label: 'Refactor' },
-]
-
 export function WorkItemNew() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { data: capture } = useQuery({ queryKey: ['work-items-capture'], queryFn: api.getCaptureDefinition })
+
   const [intent, setIntent] = useState('')
   const [type, setType] = useState('feature')
+  const [answers, setAnswers] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const types = capture?.types ?? [{ value: 'feature', label: 'Feature' }]
+  const questions = capture?.questions[type] ?? []
 
   const create = async () => {
     if (!intent.trim() || busy) return
     setBusy(true); setError(null)
     try {
-      const res = await api.createWorkItem(intent.trim(), type)
+      const res = await api.createWorkItem(intent.trim(), type, answers)
       queryClient.invalidateQueries({ queryKey: ['work-items'] })
-      router.navigate({ to: '/work-items/$workItemId/edit', params: { workItemId: res.id } })
+      // Land on the refine screen — the captured intent is meant to be refined next.
+      router.navigate({ to: '/work-items/$workItemId/refine', params: { workItemId: res.id } })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The Work Item could not be created.')
       setBusy(false)
@@ -40,7 +38,7 @@ export function WorkItemNew() {
       <Breadcrumbs crumbs={[{ label: 'Work Items', path: '/work-items' }, { label: 'New' }]} />
       <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Create Work Item</h2>
       <p style={{ fontSize: 14, color: 'var(--foreground-muted)', margin: '0 0 24px' }}>
-        Start with what needs to change. You'll refine the scope next; the Work Item begins as a Draft.
+        Capture what needs to change in your own words. The Work Item starts as a Draft — you refine the scope with AI next.
       </p>
 
       <Labeled label="What needs to change?" htmlFor="wi-intent">
@@ -54,12 +52,24 @@ export function WorkItemNew() {
         />
       </Labeled>
 
-      <SelectField id="wi-type" label="Type" value={type} onChange={setType} options={TYPES} />
+      <SelectField id="wi-type" label="Type" value={type} onChange={(v) => { setType(v); setAnswers({}) }} options={types} />
+
+      {/* CLI-parity capture questions — free text, from Kaddo Core (not a structured schema). */}
+      {questions.map((q) => (
+        <Labeled key={q.id} label={q.prompt} htmlFor={`cap-${q.id}`}>
+          <textarea
+            id={`cap-${q.id}`}
+            value={answers[q.field] ?? ''}
+            onChange={(e) => setAnswers((a) => ({ ...a, [q.field]: e.target.value }))}
+            rows={q.field === 'acceptance_criteria' ? 3 : 2}
+            placeholder={q.placeholder}
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--foreground)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }}
+          />
+        </Labeled>
+      ))}
 
       {error && (
-        <div style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 16, fontSize: 14 }}>
-          {error}
-        </div>
+        <div style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 16, fontSize: 14 }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

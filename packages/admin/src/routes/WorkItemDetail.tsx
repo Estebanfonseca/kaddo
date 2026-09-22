@@ -79,10 +79,18 @@ export function WorkItemDetail() {
           >
             ↻ Refresh
           </button>
+          {wi.status === 'draft' && (
+            <button
+              onClick={() => router.navigate({ to: '/work-items/$workItemId/refine', params: { workItemId } })}
+              style={{ padding: '6px 12px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+            >
+              ✦ Refine with AI
+            </button>
+          )}
           {(wi.status === 'draft' || wi.status === 'ready') && (
             <button
               onClick={() => router.navigate({ to: '/work-items/$workItemId/edit', params: { workItemId } })}
-              style={{ padding: '6px 12px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+              style={{ padding: '6px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
             >
               Edit
             </button>

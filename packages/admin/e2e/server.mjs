@@ -34,6 +34,8 @@ const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaddo-admin-e2e-'))
 copyDir(path.join(fixtureRoot, 'knowledge'), path.join(projectDir, 'knowledge'))
 fs.mkdirSync(path.join(projectDir, '.kaddo'), { recursive: true })
 fs.copyFileSync(path.join(fixtureRoot, 'config.yml'), path.join(projectDir, '.kaddo', 'config.yml'))
+const fixtureModules = path.join(fixtureRoot, 'modules.yml')
+if (fs.existsSync(fixtureModules)) fs.copyFileSync(fixtureModules, path.join(projectDir, '.kaddo', 'modules.yml'))
 
 fs.mkdirSync(path.join(projectDir, '.kaddo', 'admin'), { recursive: true })
 const storage = new SQLiteAdminStorage(path.join(projectDir, '.kaddo', 'admin', 'admin.db'))

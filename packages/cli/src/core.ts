@@ -47,4 +47,19 @@ export {
   type ValidationResult,
   type WriteErrorCode,
 } from './core/work-item-write.js'
+export {
+  getWorkItemCaptureDefinition,
+  getWorkItemAgentAssets,
+  assembleRefinementContext,
+  normalizeAndValidateProposal,
+  applyRefinement,
+  type WorkItemCaptureDefinition,
+  type CaptureQuestion,
+  type WorkItemAgentAssets,
+  type RefinementContext,
+  type RefinementKnowledgeRef,
+  type WorkItemRefinementProposal,
+  type ProposalValidation,
+  type NormalizedRefinement,
+} from './core/work-item-refinement.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'
