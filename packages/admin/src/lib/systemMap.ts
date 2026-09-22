@@ -1,6 +1,19 @@
 import dagre from '@dagrejs/dagre'
 import type { Node as RFNode, Edge as RFEdge } from '@xyflow/react'
-import type { SystemMapProjection, SystemMapNode } from './api'
+import type { SystemMapProjection, SystemMapNode, SystemDimension } from './api'
+
+// Each dimension gets a distinct border style (not color alone) so System / Knowledge / Delivery /
+// Implementation nodes are visually separable regardless of type.
+export const DIMENSION_META: Record<SystemDimension, { label: string; border: string }> = {
+  system: { label: 'System', border: 'solid' },
+  knowledge: { label: 'Knowledge', border: 'solid' },
+  delivery: { label: 'Delivery', border: 'dashed' },
+  implementation: { label: 'Implementation', border: 'dotted' },
+  unknown: { label: 'Unknown', border: 'solid' },
+}
+
+// Concepts rank before implementation artifacts in search.
+const DIMENSION_RANK: Record<SystemDimension, number> = { system: 0, knowledge: 1, delivery: 2, unknown: 3, implementation: 4 }
 
 // Presentation layer for the System Map. The Kaddo Graph (via the Core projection) is the model;
 // this only positions and styles it for React Flow. React Flow is never the domain model.
@@ -118,13 +131,15 @@ export function toReactFlowEdges(projection: SystemMapProjection, selectedId: st
   })
 }
 
-/** Deterministic search over label / type / module — no LLM. */
+/** Deterministic search over label / type / module — concepts before implementation artifacts. */
 export function searchNodes(nodes: SystemMapNode[], query: string): SystemMapNode[] {
   const q = query.trim().toLowerCase()
   if (!q) return []
-  return nodes.filter((n) =>
-    n.label.toLowerCase().includes(q) ||
-    n.type.toLowerCase().includes(q) ||
-    (n.moduleId ?? '').toLowerCase().includes(q),
-  )
+  return nodes
+    .filter((n) =>
+      n.label.toLowerCase().includes(q) ||
+      n.type.toLowerCase().includes(q) ||
+      (n.moduleId ?? '').toLowerCase().includes(q),
+    )
+    .sort((a, b) => DIMENSION_RANK[a.dimension] - DIMENSION_RANK[b.dimension])
 }

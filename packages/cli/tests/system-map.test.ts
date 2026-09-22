@@ -92,4 +92,31 @@ describe('VS-100: System Map projection', () => {
     expect(map.nodes.length).toBe(graph.nodes.length)
     expect(map.relationships.length).toBe(graph.edges.length)
   })
+
+  it('classifies nodes into dimensions and reports topology availability honestly', async () => {
+    fullProject(dir)
+    const core = await import('../src/core.js')
+    const map = core.getSystemMapProjection(dir)
+    const wi = map.nodes.find((n) => n.type === 'work-item')!
+    const code = map.nodes.find((n) => n.type === 'code-glob')!
+    const adr = map.nodes.find((n) => n.type === 'decision')!
+    expect(wi.dimension).toBe('delivery')
+    expect(code.dimension).toBe('implementation')
+    expect(adr.dimension).toBe('knowledge')
+    // This graph has no semantic system-topology nodes — reported honestly, not faked.
+    expect(map.metadata.topologyAvailable).toBe(false)
+    expect(map.metadata.dimensions.system).toBe(0)
+    expect(map.metadata.dimensions.delivery).toBeGreaterThan(0)
+  })
+
+  it('exposes a deterministic node traversal for VS-101', async () => {
+    fullProject(dir)
+    const core = await import('../src/core.js')
+    const ctx = core.getSystemNodeContext(dir, 'wi:WI-007')!
+    expect(ctx.node.workItemRef).toBe('WI-007')
+    // WI-007 owns code and depends on ADR-004.
+    const outTypes = ctx.outgoing.map((o) => o.node.type)
+    expect(outTypes).toEqual(expect.arrayContaining(['code-glob', 'decision']))
+    expect(core.getSystemNodeContext(dir, 'nope')).toBeNull()
+  })
 })

@@ -13,10 +13,16 @@ import { discoverKnowledge, discoverWorkItems } from '../services/knowledge-arti
 import { loadMappedModules } from '../services/mapped-modules.js'
 import { exists, join } from '../utils/fs.js'
 
+// The four dimensions a node belongs to. System = how the system is built (topology); Knowledge =
+// why it exists and under what constraints; Delivery = how it evolved; Implementation = where it
+// lives in code. Derived deterministically from the graph node type — never inferred/invented.
+export type SystemDimension = 'system' | 'knowledge' | 'delivery' | 'implementation' | 'unknown'
+
 export type SystemMapNode = {
   id: string
   type: string
   label: string
+  dimension: SystemDimension
   status?: string
   /** Project-relative path only — never absolute. */
   path?: string
@@ -26,6 +32,23 @@ export type SystemMapNode = {
   knowledgeRef?: { id: string; layer: string }
   /** Module/repository grouping when it can be determined deterministically. */
   moduleId?: string
+}
+
+function dimensionOf(type: string): SystemDimension {
+  switch (type) {
+    case 'module': case 'application': case 'service': case 'component':
+    case 'api': case 'interface': case 'database': case 'queue': case 'job': case 'external-system':
+      return 'system'
+    case 'business': case 'product': case 'tech': case 'delivery':
+    case 'capability': case 'decision': case 'project': case 'knowledge-capsule':
+      return 'knowledge'
+    case 'work-item': case 'initiative': case 'roadmap-candidate': case 'release':
+      return 'delivery'
+    case 'code-glob': case 'file': case 'directory': case 'migration': case 'configuration-artifact':
+      return 'implementation'
+    default:
+      return 'unknown'
+  }
 }
 
 export type SystemMapRelationship = {
@@ -51,6 +74,10 @@ export type SystemMapMetadata = {
   /** Deterministic coverage signal from Core graph hints — never a fabricated percentage. */
   coverage: GraphQuality
   available: boolean
+  /** Node counts per dimension, so interfaces can present honest availability. */
+  dimensions: Record<SystemDimension, number>
+  /** Whether Kaddo knows any semantic system-topology node (vs only knowledge/delivery). */
+  topologyAvailable: boolean
 }
 
 export type SystemMapProjection = {
@@ -73,13 +100,17 @@ const EDGE_LABELS: Record<string, string> = {
   uses_external_knowledge: 'uses external knowledge',
 }
 
+function emptyDimensions(): Record<SystemDimension, number> {
+  return { system: 0, knowledge: 0, delivery: 0, implementation: 0, unknown: 0 }
+}
+
 function emptyProjection(name: string, structure: string): SystemMapProjection {
   return {
     system: { name },
     nodes: [],
     relationships: [],
     groups: [],
-    metadata: { projectName: name, structure, nodeCount: 0, relationshipCount: 0, coverage: 'empty', available: false },
+    metadata: { projectName: name, structure, nodeCount: 0, relationshipCount: 0, coverage: 'empty', available: false, dimensions: emptyDimensions(), topologyAvailable: false },
   }
 }
 
@@ -127,6 +158,9 @@ export function getSystemMapProjection(dir: string): SystemMapProjection {
   ]
   const groups = allGroups.filter((g) => usedGroups.has(g.id) || g.available === false)
 
+  const dimensions = emptyDimensions()
+  for (const n of nodes) dimensions[n.dimension]++
+
   return {
     system: { name: config.project.name },
     nodes,
@@ -139,8 +173,36 @@ export function getSystemMapProjection(dir: string): SystemMapProjection {
       relationshipCount: relationships.length,
       coverage: hints.quality,
       available: nodes.length > 0,
+      dimensions,
+      topologyAvailable: dimensions.system > 0,
     },
   }
+}
+
+// --- Traversal (VS-100.1 → VS-101 boundary) ----------------------------------
+
+export type SystemNodeContext = {
+  node: SystemMapNode
+  incoming: { relationship: SystemMapRelationship; node: SystemMapNode }[]
+  outgoing: { relationship: SystemMapRelationship; node: SystemMapNode }[]
+}
+
+/**
+ * Resolve a node and its immediate relationships from the projection. This is the deterministic
+ * traversal surface VS-101 (Graph-Assisted Impact Analysis) builds on — no React Flow, no LLM.
+ */
+export function getSystemNodeContext(dir: string, nodeId: string): SystemNodeContext | null {
+  const projection = getSystemMapProjection(dir)
+  const byId = new Map(projection.nodes.map((n) => [n.id, n]))
+  const node = byId.get(nodeId)
+  if (!node) return null
+  const incoming: SystemNodeContext['incoming'] = []
+  const outgoing: SystemNodeContext['outgoing'] = []
+  for (const r of projection.relationships) {
+    if (r.target === nodeId) { const s = byId.get(r.source); if (s) incoming.push({ relationship: r, node: s }) }
+    if (r.source === nodeId) { const t = byId.get(r.target); if (t) outgoing.push({ relationship: r, node: t }) }
+  }
+  return { node, incoming, outgoing }
 }
 
 function toNode(
@@ -149,7 +211,7 @@ function toNode(
   wiModules: Map<string, string[]>,
   groupIds: Set<string>,
 ): SystemMapNode {
-  const node: SystemMapNode = { id: n.id, type: n.type, label: n.label }
+  const node: SystemMapNode = { id: n.id, type: n.type, label: n.label, dimension: dimensionOf(n.type) }
   if (n.status) node.status = n.status
   // Graph paths are already project-relative; expose them, never anything absolute.
   if (n.path && !/^([a-zA-Z]:[\\/]|\/)/.test(n.path)) node.path = n.path

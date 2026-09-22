@@ -210,10 +210,12 @@ export type RefinementHandoff = {
 
 // --- System Map (VS-100) -----------------------------------------------------
 
+export type SystemDimension = 'system' | 'knowledge' | 'delivery' | 'implementation' | 'unknown'
 export type SystemMapNode = {
   id: string
   type: string
   label: string
+  dimension: SystemDimension
   status?: string
   path?: string
   workItemRef?: string
@@ -227,7 +229,11 @@ export type SystemMapProjection = {
   nodes: SystemMapNode[]
   relationships: SystemMapRelationship[]
   groups: SystemMapGroup[]
-  metadata: { projectName: string; structure: string; nodeCount: number; relationshipCount: number; coverage: 'good' | 'partial' | 'sparse' | 'empty'; available: boolean }
+  metadata: {
+    projectName: string; structure: string; nodeCount: number; relationshipCount: number
+    coverage: 'good' | 'partial' | 'sparse' | 'empty'; available: boolean
+    dimensions: Record<SystemDimension, number>; topologyAvailable: boolean
+  }
 }
 
 export type WorkItemFilters = { status?: string; module?: string; query?: string }

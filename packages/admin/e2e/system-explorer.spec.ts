@@ -20,7 +20,7 @@ test('a node deep link opens the details panel and navigates to the Work Item', 
   const main = page.locator('main')
   // The details panel heading is the node's label (unique to the panel, not the filter options).
   await expect(main.getByRole('heading', { name: 'Refine onboarding checklist' })).toBeVisible()
-  await expect(main.getByText('Relationships', { exact: true })).toBeVisible()
+  await expect(main.getByText('Knowledge context')).toBeVisible()
   await expect(main.getByRole('button', { name: /depends on/ }).first()).toBeVisible()
 
   // Cross-navigation to the Work Item detail.
@@ -30,9 +30,9 @@ test('a node deep link opens the details panel and navigates to the Work Item', 
 
 test('search focuses a node and opens its details', async ({ page }) => {
   await page.goto('/system')
-  await page.getByRole('searchbox', { name: 'Search system' }).fill('onboarding')
-  await page.getByRole('button', { name: /onboarding/i }).first().click()
-  await expect(page.locator('main').getByText('Relationships', { exact: true })).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Search system' }).fill('checklist')
+  await page.getByRole('button', { name: /checklist/i }).first().click()
+  await expect(page.locator('main').getByText('Knowledge context')).toBeVisible()
 })
 
 test('type filter narrows the map without breaking it', async ({ page }) => {
@@ -40,4 +40,22 @@ test('type filter narrows the map without breaking it', async ({ page }) => {
   await page.getByLabel('Filter by type').selectOption('work-item')
   // Still renders (work item nodes remain); non-empty.
   await expect(page.getByText(/nodes ·/)).toBeVisible()
+})
+
+test('topology-first: implementation artifacts are an off-by-default overlay', async ({ page }) => {
+  await page.goto('/system')
+  // Honest topology note (this fixture has no semantic system nodes).
+  await expect(page.getByText(/Semantic system topology isn't available/)).toBeVisible()
+  // Implementation overlay is off by default — no code-glob nodes on the canvas.
+  await expect(page.locator('main').getByText('src/onboarding/**')).toHaveCount(0)
+  // Enabling it adds the implementation artifacts.
+  await page.getByLabel('Toggle Implementation').check()
+  await expect(page.locator('main').getByText('src/onboarding/**').first()).toBeVisible()
+})
+
+test('node details group neighbours by dimension (knowledge vs implementation)', async ({ page }) => {
+  await page.goto('/system?node=wi:WI-007')
+  const panel = page.locator('aside').filter({ hasText: 'Refine onboarding checklist' })
+  await expect(panel.getByText('Knowledge context')).toBeVisible()
+  await expect(panel.getByText('Implementation', { exact: true })).toBeVisible()
 })

@@ -55,8 +55,20 @@ function NodeDetails({ node, projection, nodeById, onSelectNode, router }: {
   router: ReturnType<typeof useRouter>
 }) {
   const cat = nodeCategory(node.type)
-  const outgoing = projection.relationships.filter((r) => r.source === node.id)
-  const incoming = projection.relationships.filter((r) => r.target === node.id)
+
+  // Collect neighbours (both directions) and group them by the connected node's dimension so the
+  // panel reads as: technical relationships, knowledge context, delivery history, implementation.
+  type Neighbour = { id: string; label: string; rel: string; dimension: string }
+  const neighbours: Neighbour[] = []
+  for (const r of projection.relationships) {
+    if (r.source === node.id) { const o = nodeById.get(r.target); if (o) neighbours.push({ id: o.id, label: o.label, rel: `${r.label} →`, dimension: o.dimension }) }
+    else if (r.target === node.id) { const o = nodeById.get(r.source); if (o) neighbours.push({ id: o.id, label: o.label, rel: `${r.label} from`, dimension: o.dimension }) }
+  }
+  const byDim = (d: string) => neighbours.filter((n) => n.dimension === d)
+  const technical = byDim('system')
+  const knowledge = byDim('knowledge')
+  const delivery = byDim('delivery')
+  const implementation = byDim('implementation')
 
   return (
     <div>
@@ -65,11 +77,34 @@ function NodeDetails({ node, projection, nodeById, onSelectNode, router }: {
       {node.moduleId && <Row label="Module / repository"><span className="font-mono">{node.moduleId}</span></Row>}
       {node.status && <Row label="Status">{humanize(node.status)}</Row>}
 
-      {(outgoing.length > 0 || incoming.length > 0) && (
+      {technical.length > 0 && (
         <Row label="Relationships">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {outgoing.map((r) => <LinkButton key={r.id} onClick={() => onSelectNode(r.target)}>{r.label} → {nodeById.get(r.target)?.label ?? r.target}</LinkButton>)}
-            {incoming.map((r) => <LinkButton key={r.id} onClick={() => onSelectNode(r.source)}>{nodeById.get(r.source)?.label ?? r.source} {r.label} →</LinkButton>)}
+            {technical.map((n, i) => <LinkButton key={i} onClick={() => onSelectNode(n.id)}>{n.rel} {n.label}</LinkButton>)}
+          </div>
+        </Row>
+      )}
+
+      {knowledge.length > 0 && (
+        <Row label="Knowledge context">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {knowledge.map((n, i) => <LinkButton key={i} onClick={() => onSelectNode(n.id)}>{n.rel} {n.label}</LinkButton>)}
+          </div>
+        </Row>
+      )}
+
+      {delivery.length > 0 && (
+        <Row label="Delivery history">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {delivery.map((n, i) => <LinkButton key={i} onClick={() => onSelectNode(n.id)}>{n.rel} {n.label}</LinkButton>)}
+          </div>
+        </Row>
+      )}
+
+      {implementation.length > 0 && (
+        <Row label="Implementation">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {implementation.map((n, i) => <span key={i} className="font-mono" style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{n.label}</span>)}
           </div>
         </Row>
       )}

@@ -1,19 +1,20 @@
 import { Handle, Position } from '@xyflow/react'
 import type { SystemMapNode } from '../../lib/api'
-import { nodeCategory } from '../../lib/systemMap'
+import { nodeCategory, DIMENSION_META } from '../../lib/systemMap'
 
 type Data = { node: SystemMapNode; selected: boolean }
 
-/** A single system element. Type/status are conveyed by label + text, not color alone. */
+/** A single system element. Type/status/dimension are conveyed by label + text + border, not color alone. */
 export function SystemNode({ data }: { data: Data }) {
   const { node, selected } = data
   const cat = nodeCategory(node.type)
+  const dim = DIMENSION_META[node.dimension]
   return (
     <div
       style={{
         width: 190, minHeight: 58, boxSizing: 'border-box',
         background: 'var(--surface)',
-        border: `1px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
+        border: `1px ${dim.border} ${selected ? 'var(--primary)' : 'var(--border)'}`,
         borderLeft: `4px solid ${cat.tone}`,
         borderRadius: 'var(--radius)',
         boxShadow: selected ? '0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent)' : 'none',

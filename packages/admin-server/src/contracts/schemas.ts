@@ -287,6 +287,7 @@ export const SystemMapNodeSchema = z.object({
   id: z.string(),
   type: z.string(),
   label: z.string(),
+  dimension: z.enum(['system', 'knowledge', 'delivery', 'implementation', 'unknown']),
   status: z.string().optional(),
   path: z.string().optional(),
   workItemRef: z.string().optional(),
@@ -321,6 +322,8 @@ export const SystemMapProjectionSchema = z.object({
     relationshipCount: z.number(),
     coverage: z.enum(['good', 'partial', 'sparse', 'empty']),
     available: z.boolean(),
+    dimensions: z.object({ system: z.number(), knowledge: z.number(), delivery: z.number(), implementation: z.number(), unknown: z.number() }),
+    topologyAvailable: z.boolean(),
   }),
 })
 

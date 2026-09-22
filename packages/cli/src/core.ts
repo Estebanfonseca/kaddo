@@ -57,10 +57,13 @@ export {
 export { computeRefinementStatus, type RefinementStatus } from './core/work-items.js'
 export {
   getSystemMapProjection,
+  getSystemNodeContext,
   type SystemMapProjection,
   type SystemMapNode,
   type SystemMapRelationship,
   type SystemMapGroup,
   type SystemMapMetadata,
+  type SystemDimension,
+  type SystemNodeContext,
 } from './core/system-map.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'

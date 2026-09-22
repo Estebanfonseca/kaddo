@@ -7,7 +7,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { api } from '../lib/api'
-import type { SystemMapProjection } from '../lib/api'
+import type { SystemMapProjection, SystemDimension } from '../lib/api'
 import { SystemNode, SystemGroupNode } from '../components/system/SystemNode'
 import { SystemDetails } from '../components/system/SystemDetails'
 import {
@@ -33,11 +33,17 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
   const [query, setQuery] = useState('')
   const [moduleFilter, setModuleFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  // Topology-first: System (base) + Knowledge + Delivery on; Implementation artifacts off so files
+  // don't dominate. Unknown stays visible so nothing is silently dropped.
+  const [overlays, setOverlays] = useState<Record<SystemDimension, boolean>>({
+    system: true, knowledge: true, delivery: true, implementation: false, unknown: true,
+  })
 
   const types = useMemo(() => [...new Set(projection.nodes.map((n) => n.type))].sort(), [projection])
 
   const filtered = useMemo<SystemMapProjection>(() => {
     const nodes = projection.nodes.filter((n) =>
+      overlays[n.dimension] &&
       (moduleFilter === 'all' || n.moduleId === moduleFilter) &&
       (typeFilter === 'all' || n.type === typeFilter),
     )
@@ -47,7 +53,14 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
       nodes,
       relationships: projection.relationships.filter((r) => kept.has(r.source) && kept.has(r.target)),
     }
-  }, [projection, moduleFilter, typeFilter])
+  }, [projection, moduleFilter, typeFilter, overlays])
+
+  const toggle = (d: SystemDimension) => setOverlays((o) => ({ ...o, [d]: !o[d] }))
+  const overlayControl = (d: SystemDimension, label: string) => (
+    <label style={{ display: 'inline-flex', gap: 5, alignItems: 'center', fontSize: 12, cursor: 'pointer', color: 'var(--foreground-muted)' }}>
+      <input type="checkbox" checked={overlays[d]} onChange={() => toggle(d)} aria-label={`Toggle ${label}`} />{label}
+    </label>
+  )
 
   const layout = useMemo(() => layoutSystemMap(filtered), [filtered])
   const rfNodes = useMemo<RFNode[]>(() => toReactFlowNodes(filtered, layout, selectedNodeId), [filtered, layout, selectedNodeId])
@@ -105,11 +118,23 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
             <option value="all">All types</option>
             {types.map((t) => <option key={t} value={t}>{nodeCategory(t).label}</option>)}
           </select>
+          <div style={{ display: 'inline-flex', gap: 12, alignItems: 'center', paddingLeft: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3, color: 'var(--foreground-muted)' }}>Show</span>
+            {overlayControl('knowledge', 'Knowledge')}
+            {overlayControl('delivery', 'Delivery')}
+            {overlayControl('implementation', 'Implementation')}
+          </div>
           <span style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
             {filtered.nodes.length} nodes · {filtered.relationships.length} relationships · coverage {projection.metadata.coverage}
           </span>
           <button onClick={() => queryClient.invalidateQueries({ queryKey: ['system-map'] })} style={{ ...inputStyle, cursor: 'pointer', color: 'var(--foreground-muted)' }}>↻ Refresh</button>
         </div>
+
+        {!projection.metadata.topologyAvailable && (
+          <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--foreground-muted)', background: 'color-mix(in srgb, var(--warning) 8%, transparent)', borderBottom: '1px solid var(--border)' }}>
+            Semantic system topology isn't available yet — showing the knowledge and delivery context Kaddo knows. Coverage is <strong>{projection.metadata.coverage}</strong>.
+          </div>
+        )}
 
         {filtered.nodes.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--foreground-muted)', fontSize: 14 }}>No nodes match these filters.</div>
