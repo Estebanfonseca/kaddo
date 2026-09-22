@@ -19,7 +19,9 @@ import { exists, readFile, join, isFile } from '../utils/fs.js'
 import { discoverWorkItems } from '../services/knowledge-artifacts.js'
 import { loadMappedModules } from '../services/mapped-modules.js'
 import { lifecycleStateOf, type LifecycleState } from './lifecycle.js'
-import { WORK_ITEM_TYPES } from './knowledge-discovery.js'
+// Validate against the canonical Work Item type catalog (feature/bugfix/hotfix/spike/chore) — the
+// same list the capture definition offers — not the artifact-discovery classifier set.
+import { isValidType, normalizeType } from './knowledge-levels.js'
 
 const WORK_ITEMS_DIR = 'knowledge/delivery/work-items'
 
@@ -408,8 +410,8 @@ function captureBody(title: string, type: string, answers: Record<string, string
 export function createWorkItem(dir: string, opts: { intent: string; type: string; answers?: Record<string, string> }): { id: string; path: string; revision: string } {
   const intent = opts.intent.trim()
   if (!intent) throw new WorkItemWriteError('INVALID_INPUT', 'An intent or summary is required.')
-  const type = opts.type.trim() || 'feature'
-  if (!WORK_ITEM_TYPES.has(type)) throw new WorkItemWriteError('INVALID_INPUT', `Unknown Work Item type "${type}".`)
+  const type = normalizeType(opts.type.trim()) ?? ''
+  if (!type) throw new WorkItemWriteError('INVALID_INPUT', `Unknown Work Item type "${opts.type}".`)
 
   const id = nextWorkItemId(dir)
   const title = intent.split(/\r?\n/)[0].trim().slice(0, 120)
@@ -447,7 +449,7 @@ export function createWorkItem(dir: string, opts: { intent: string; type: string
 
 function validateInput(input: WorkItemInput): void {
   if (!input.title.trim()) throw new WorkItemWriteError('INVALID_INPUT', 'Title is required.')
-  if (!WORK_ITEM_TYPES.has(input.type)) throw new WorkItemWriteError('INVALID_INPUT', `Unknown Work Item type "${input.type}".`)
+  if (!isValidType(input.type)) throw new WorkItemWriteError('INVALID_INPUT', `Unknown Work Item type "${input.type}".`)
 }
 
 export function updateWorkItem(dir: string, id: string, input: WorkItemInput, expectedRevision: string): { revision: string; path: string } {

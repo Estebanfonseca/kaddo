@@ -48,6 +48,14 @@ describe('VS-099: create', () => {
     expect(() => core.createWorkItem(dir, { intent: '   ', type: 'feature' })).toThrow('intent')
     expect(() => core.createWorkItem(dir, { intent: 'x', type: 'nope' })).toThrow('type')
   })
+
+  it('accepts every canonical Work Item type offered by the capture definition', async () => {
+    const core = await import('../src/core.js')
+    for (const t of core.getWorkItemCaptureDefinition().types.map((x) => x.value)) {
+      const res = core.createWorkItem(dir, { intent: `A ${t}`, type: t })
+      expect(core.getWorkItem(dir, res.id).type).toBe(t)
+    }
+  })
 })
 
 describe('VS-099: edit round-trip', () => {
