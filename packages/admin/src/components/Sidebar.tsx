@@ -1,4 +1,4 @@
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useRouterState } from '@tanstack/react-router'
 import { isNavItemActive } from '../lib/presentation'
 
 type NavItem = { label: string; path: string; icon: string; disabled?: boolean }
@@ -12,7 +12,8 @@ const navItems: NavItem[] = [
 
 export function Sidebar({ projectName }: { projectName: string }) {
   const router = useRouter()
-  const currentPath = router.state.location.pathname
+  // Subscribe to the location so the active item updates on SPA navigation (not just full loads).
+  const currentPath = useRouterState({ select: (s) => s.location.pathname })
 
   return (
     <aside style={{
