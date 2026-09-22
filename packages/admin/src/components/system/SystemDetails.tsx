@@ -76,6 +76,7 @@ function NodeDetails({ node, projection, nodeById, onSelectNode, router }: {
       <Row label="Type">{cat.label}</Row>
       {node.moduleId && <Row label="Module / repository"><span className="font-mono">{node.moduleId}</span></Row>}
       {node.status && <Row label="Status">{humanize(node.status)}</Row>}
+      {node.purpose && <Row label="Purpose">{node.purpose}</Row>}
 
       {technical.length > 0 && (
         <Row label="Relationships">
@@ -109,11 +110,31 @@ function NodeDetails({ node, projection, nodeById, onSelectNode, router }: {
         </Row>
       )}
 
-      {node.knowledgeRef && (
-        <Row label="Related knowledge">
-          <LinkButton onClick={() => router.navigate({ to: '/knowledge/$layer/$artifactId', params: { layer: node.knowledgeRef!.layer, artifactId: node.knowledgeRef!.id } })}>
-            {humanize(node.knowledgeRef.layer)} / {node.knowledgeRef.id} →
-          </LinkButton>
+      {(node.knowledgeRef || (node.knowledgeRefs && node.knowledgeRefs.length > 0)) && (
+        <Row label="Knowledge">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {node.knowledgeRef && (
+              <LinkButton onClick={() => router.navigate({ to: '/knowledge/$layer/$artifactId', params: { layer: node.knowledgeRef!.layer, artifactId: node.knowledgeRef!.id } })}>
+                {humanize(node.knowledgeRef.layer)} / {node.knowledgeRef.id} →
+              </LinkButton>
+            )}
+            {(node.knowledgeRefs ?? []).map((k) => (
+              <LinkButton key={k.id} onClick={() => router.navigate({ to: '/knowledge/$layer/$artifactId', params: { layer: k.layer, artifactId: k.id } })}>
+                {humanize(k.layer)} / {k.id} →
+              </LinkButton>
+            ))}
+          </div>
+        </Row>
+      )}
+
+      {node.provenance && (
+        <Row label="Provenance">
+          {humanize(node.provenance)}
+          {node.evidence && node.evidence.length > 0 && (
+            <div className="font-mono" style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 4 }}>
+              {node.evidence.map((e, i) => <div key={i}>{e}</div>)}
+            </div>
+          )}
         </Row>
       )}
 

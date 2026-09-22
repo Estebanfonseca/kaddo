@@ -18,6 +18,7 @@ import {
   getWorkItemCaptureDefinition as coreGetCaptureDefinition,
   buildRefinementHandoff as coreBuildRefinementHandoff,
   getSystemMapProjection as coreGetSystemMapProjection,
+  buildTopologyEnrichmentHandoff as coreBuildTopologyHandoff,
   WorkItemWriteError,
   exists,
   join,
@@ -130,6 +131,12 @@ export function getCaptureDefinition(): ReturnType<typeof coreGetCaptureDefiniti
 
 export function getSystemMap(dir: string): SystemMapProjection {
   return coreGetSystemMapProjection(dir) as SystemMapProjection
+}
+
+export function getTopologyHandoff(dir: string): ReturnType<typeof coreBuildTopologyHandoff> {
+  const config = loadConfig(dir)
+  if (!config) throw new CoreError('PROJECT_NOT_FOUND', 'No Kaddo project was found.')
+  return coreBuildTopologyHandoff(dir, config.project.name ?? 'this project')
 }
 
 export function getRefinementHandoff(dir: string, workItemId: string): ReturnType<typeof coreBuildRefinementHandoff> {

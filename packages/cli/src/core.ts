@@ -66,4 +66,15 @@ export {
   type SystemDimension,
   type SystemNodeContext,
 } from './core/system-map.js'
+export {
+  loadSystemTopology,
+  validateSystemTopology,
+  buildTopologyEnrichmentHandoff,
+  TOPOLOGY_FILE,
+  type SystemEntity,
+  type TechnicalRelationship,
+  type SystemTopology,
+  type TopologyFinding,
+  type TopologyEnrichmentHandoff,
+} from './core/system-topology.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'

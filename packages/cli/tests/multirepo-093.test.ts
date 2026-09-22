@@ -142,13 +142,17 @@ function cleanSibling(name: string) {
   if (fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true })
 }
 
-beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaddo-093-')) })
+// The core repo lives inside a dedicated per-test root, so sibling repos (created at `dir/..`) and
+// discoverModules' workspace scan stay isolated from other tests sharing os.tmpdir (avoids a flaky
+// cross-test "duplicate module id" count under parallel runs).
+let root: string
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'kaddo-093-'))
+  dir = path.join(root, 'core')
+  fs.mkdirSync(dir, { recursive: true })
+})
 afterEach(() => {
-  cleanSibling('acme-billing')
-  cleanSibling('acme-admin')
-  cleanSibling('other-svc')
-  cleanSibling('no-kaddo-repo')
-  fs.rmSync(dir, { recursive: true, force: true })
+  fs.rmSync(root, { recursive: true, force: true })
 })
 
 // --- VS-093: config: system.name and workspace_roots ---

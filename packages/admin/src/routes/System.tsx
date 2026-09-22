@@ -10,6 +10,7 @@ import { api } from '../lib/api'
 import type { SystemMapProjection, SystemDimension } from '../lib/api'
 import { SystemNode, SystemGroupNode } from '../components/system/SystemNode'
 import { SystemDetails } from '../components/system/SystemDetails'
+import { TopologyStatus } from '../components/system/TopologyStatus'
 import {
   layoutSystemMap, toReactFlowNodes, toReactFlowEdges, searchNodes, nodeCategory,
 } from '../lib/systemMap'
@@ -130,11 +131,7 @@ function Canvas({ projection }: { projection: SystemMapProjection }) {
           <button onClick={() => queryClient.invalidateQueries({ queryKey: ['system-map'] })} style={{ ...inputStyle, cursor: 'pointer', color: 'var(--foreground-muted)' }}>↻ Refresh</button>
         </div>
 
-        {!projection.metadata.topologyAvailable && (
-          <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--foreground-muted)', background: 'color-mix(in srgb, var(--warning) 8%, transparent)', borderBottom: '1px solid var(--border)' }}>
-            Semantic system topology isn't available yet — showing the knowledge and delivery context Kaddo knows. Coverage is <strong>{projection.metadata.coverage}</strong>.
-          </div>
-        )}
+        <TopologyStatus metadata={projection.metadata} />
 
         {filtered.nodes.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--foreground-muted)', fontSize: 14 }}>No nodes match these filters.</div>

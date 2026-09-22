@@ -1,0 +1,30 @@
+entities:
+  - id: admin-metrics
+    kind: component
+    label: Admin Metrics
+    purpose: Provides aggregated administrative metrics and recent activity.
+    module: core
+    implementation:
+      - src/app/admin/metricas/page.tsx
+    provenance: agent-reviewed
+    evidence:
+      - src/app/admin/metricas/page.tsx
+  - id: supabase
+    kind: external-system
+    label: Supabase
+  - id: registration-ui
+    kind: component
+    label: Public Registration
+    module: frontend
+  - id: registration-api
+    kind: api
+    label: Registration API
+    module: core
+
+relationships:
+  - from: admin-metrics
+    to: supabase
+    type: reads-from
+  - from: registration-ui
+    to: registration-api
+    type: calls

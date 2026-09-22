@@ -293,6 +293,11 @@ export const SystemMapNodeSchema = z.object({
   workItemRef: z.string().optional(),
   knowledgeRef: z.object({ id: z.string(), layer: z.string() }).optional(),
   moduleId: z.string().optional(),
+  purpose: z.string().optional(),
+  implementationRefs: z.array(z.string()).optional(),
+  knowledgeRefs: z.array(z.object({ id: z.string(), layer: z.string() })).optional(),
+  provenance: z.string().optional(),
+  evidence: z.array(z.string()).optional(),
 })
 
 export const SystemMapRelationshipSchema = z.object({
@@ -324,7 +329,19 @@ export const SystemMapProjectionSchema = z.object({
     available: z.boolean(),
     dimensions: z.object({ system: z.number(), knowledge: z.number(), delivery: z.number(), implementation: z.number(), unknown: z.number() }),
     topologyAvailable: z.boolean(),
+    topologyStatus: z.enum(['unavailable', 'partial', 'available']),
+    semanticEntityCount: z.number(),
+    technicalRelationshipCount: z.number(),
+    topologyFindings: z.array(z.object({ level: z.enum(['blocking', 'warning']), message: z.string() })),
   }),
+})
+
+export const TopologyEnrichmentHandoffSchema = z.object({
+  projectName: z.string(),
+  recommendedAgent: z.string(),
+  recommendedSkill: z.string(),
+  targetFile: z.string(),
+  text: z.string(),
 })
 
 export const ErrorResponseSchema = z.object({

@@ -11,6 +11,7 @@ import { buildGraph, type GraphNode } from './graph.js'
 import { buildGraphHints, type GraphQuality } from './graph-hints.js'
 import { discoverKnowledge, discoverWorkItems } from '../services/knowledge-artifacts.js'
 import { loadMappedModules } from '../services/mapped-modules.js'
+import { loadSystemTopology, TECHNICAL_RELATIONSHIP_TYPES } from './system-topology.js'
 import { exists, join } from '../utils/fs.js'
 
 // The four dimensions a node belongs to. System = how the system is built (topology); Knowledge =
@@ -32,6 +33,12 @@ export type SystemMapNode = {
   knowledgeRef?: { id: string; layer: string }
   /** Module/repository grouping when it can be determined deterministically. */
   moduleId?: string
+  /** Semantic system entity fields (VS-100.2), present for declared topology nodes. */
+  purpose?: string
+  implementationRefs?: string[]
+  knowledgeRefs?: { id: string; layer: string }[]
+  provenance?: string
+  evidence?: string[]
 }
 
 function dimensionOf(type: string): SystemDimension {
@@ -78,6 +85,13 @@ export type SystemMapMetadata = {
   dimensions: Record<SystemDimension, number>
   /** Whether Kaddo knows any semantic system-topology node (vs only knowledge/delivery). */
   topologyAvailable: boolean
+  /** Honest topology status derived from Core — never a fabricated percentage. */
+  topologyStatus: 'unavailable' | 'partial' | 'available'
+  /** Counts of the declared semantic topology (VS-100.2). */
+  semanticEntityCount: number
+  technicalRelationshipCount: number
+  /** Findings from validating the declared topology (dropped/invalid items). */
+  topologyFindings: { level: 'blocking' | 'warning'; message: string }[]
 }
 
 export type SystemMapProjection = {
@@ -110,7 +124,11 @@ function emptyProjection(name: string, structure: string): SystemMapProjection {
     nodes: [],
     relationships: [],
     groups: [],
-    metadata: { projectName: name, structure, nodeCount: 0, relationshipCount: 0, coverage: 'empty', available: false, dimensions: emptyDimensions(), topologyAvailable: false },
+    metadata: {
+      projectName: name, structure, nodeCount: 0, relationshipCount: 0, coverage: 'empty', available: false,
+      dimensions: emptyDimensions(), topologyAvailable: false, topologyStatus: 'unavailable',
+      semanticEntityCount: 0, technicalRelationshipCount: 0, topologyFindings: [],
+    },
   }
 }
 
@@ -147,6 +165,39 @@ export function getSystemMapProjection(dir: string): SystemMapProjection {
     label: EDGE_LABELS[e.type] ?? e.type.replace(/_/g, ' '),
   }))
 
+  // --- Declared semantic topology (VS-100.2) ---
+  // Knowledge id → { id, layer } for resolving entity knowledgeRefs to navigable artifacts.
+  const knowledgeById = new Map<string, { id: string; layer: string }>()
+  for (const ref of knowledgeByPath.values()) knowledgeById.set(ref.id, ref)
+  const topology = loadSystemTopology(dir)
+  const existingIds = new Set(nodes.map((n) => n.id))
+  for (const e of topology.entities) {
+    const nodeId = `sys:${e.id}`
+    const node: SystemMapNode = {
+      id: nodeId, type: e.kind, label: e.label, dimension: 'system',
+      implementationRefs: e.implementationRefs,
+      knowledgeRefs: e.knowledgeRefs.map((k) => knowledgeById.get(k)).filter(Boolean) as { id: string; layer: string }[],
+      evidence: e.evidence,
+    }
+    if (e.purpose) node.purpose = e.purpose
+    if (e.moduleId) node.moduleId = e.moduleId
+    if (e.provenance) node.provenance = e.provenance
+    nodes.push(node)
+    existingIds.add(nodeId)
+    // Declared implementation artifacts become secondary nodes with an implemented-by edge.
+    for (const ref of e.implementationRefs) {
+      const fileId = `file:${ref}`
+      if (!existingIds.has(fileId)) {
+        nodes.push({ id: fileId, type: 'file', label: ref.split('/').pop() || ref, dimension: 'implementation', path: ref })
+        existingIds.add(fileId)
+      }
+      relationships.push({ id: `${nodeId}~implemented-by~${fileId}`, source: nodeId, target: fileId, type: 'implemented-by', label: 'implemented by' })
+    }
+  }
+  for (const r of topology.relationships) {
+    relationships.push({ id: `sys:${r.from}~${r.type}~sys:${r.to}`, source: `sys:${r.from}`, target: `sys:${r.to}`, type: r.type, label: r.type.replace(/-/g, ' ') })
+  }
+
   // Groups: mapped-module / core boundaries. Show a group when it holds a node, or when the module
   // is unavailable (so the boundary and its unavailable state remain visible — availability is not
   // the same as topology).
@@ -160,6 +211,15 @@ export function getSystemMapProjection(dir: string): SystemMapProjection {
 
   const dimensions = emptyDimensions()
   for (const n of nodes) dimensions[n.dimension]++
+
+  const semanticEntityCount = topology.entities.length
+  const technicalRelationshipCount = relationships.filter((r) => TECHNICAL_RELATIONSHIP_TYPES.has(r.type)).length
+  // Honest status: unavailable when no semantic entities; available when there are entities AND at
+  // least one technical relationship among them; otherwise partial. Never a fabricated percentage.
+  const topologyStatus: 'unavailable' | 'partial' | 'available' =
+    semanticEntityCount === 0 ? 'unavailable'
+      : topology.relationships.length > 0 ? 'available'
+        : 'partial'
 
   return {
     system: { name: config.project.name },
@@ -175,6 +235,10 @@ export function getSystemMapProjection(dir: string): SystemMapProjection {
       available: nodes.length > 0,
       dimensions,
       topologyAvailable: dimensions.system > 0,
+      topologyStatus,
+      semanticEntityCount,
+      technicalRelationshipCount,
+      topologyFindings: topology.findings,
     },
   }
 }

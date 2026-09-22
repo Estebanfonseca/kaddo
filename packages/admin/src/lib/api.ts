@@ -221,6 +221,11 @@ export type SystemMapNode = {
   workItemRef?: string
   knowledgeRef?: { id: string; layer: string }
   moduleId?: string
+  purpose?: string
+  implementationRefs?: string[]
+  knowledgeRefs?: { id: string; layer: string }[]
+  provenance?: string
+  evidence?: string[]
 }
 export type SystemMapRelationship = { id: string; source: string; target: string; type: string; label: string }
 export type SystemMapGroup = { id: string; label: string; repositoryId: string; available: boolean }
@@ -233,8 +238,12 @@ export type SystemMapProjection = {
     projectName: string; structure: string; nodeCount: number; relationshipCount: number
     coverage: 'good' | 'partial' | 'sparse' | 'empty'; available: boolean
     dimensions: Record<SystemDimension, number>; topologyAvailable: boolean
+    topologyStatus: 'unavailable' | 'partial' | 'available'
+    semanticEntityCount: number; technicalRelationshipCount: number
+    topologyFindings: { level: 'blocking' | 'warning'; message: string }[]
   }
 }
+export type TopologyEnrichmentHandoff = { projectName: string; recommendedAgent: string; recommendedSkill: string; targetFile: string; text: string }
 
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
@@ -257,6 +266,7 @@ export const api = {
   getRoute: () => fetchApi<ProjectOverview['route']>('/route'),
   getFindings: () => fetchApi<ProjectOverview['findings']>('/findings'),
   getSystemMap: () => fetchApi<SystemMapProjection>('/system'),
+  getTopologyHandoff: () => fetchApi<TopologyEnrichmentHandoff>('/system/topology-handoff'),
   getKnowledgeInventory: () => fetchApi<KnowledgeInventory>('/knowledge/inventory'),
   getKnowledgeArtifact: (artifactId: string) => fetchApi<KnowledgeArtifactDetail>(`/knowledge/artifact/${encodeURIComponent(artifactId)}`),
   getWorkItemsList: (filters: WorkItemFilters = {}) => fetchApi<WorkItemsList>(`/work-items${toQuery(filters)}`),

@@ -44,13 +44,29 @@ test('type filter narrows the map without breaking it', async ({ page }) => {
 
 test('topology-first: implementation artifacts are an off-by-default overlay', async ({ page }) => {
   await page.goto('/system')
-  // Honest topology note (this fixture has no semantic system nodes).
-  await expect(page.getByText(/Semantic system topology isn't available/)).toBeVisible()
   // Implementation overlay is off by default — no code-glob nodes on the canvas.
   await expect(page.locator('main').getByText('src/onboarding/**')).toHaveCount(0)
   // Enabling it adds the implementation artifacts.
   await page.getByLabel('Toggle Implementation').check()
   await expect(page.locator('main').getByText('src/onboarding/**').first()).toBeVisible()
+})
+
+test('VS-100.2: declared semantic topology is Available and drives the System view', async ({ page }) => {
+  await page.goto('/system')
+  // Honest topology status from Core.
+  await expect(page.getByText('System topology')).toBeVisible()
+  await expect(page.getByText('Available', { exact: true })).toBeVisible()
+  await expect(page.getByText(/semantic components/)).toBeVisible()
+})
+
+test('VS-100.2: a semantic component exposes purpose and typed technical relationships', async ({ page }) => {
+  await page.goto('/system?node=sys:admin-metrics')
+  const panel = page.locator('aside').filter({ hasText: 'Admin Metrics' })
+  await expect(panel.getByText('Purpose')).toBeVisible()
+  await expect(panel.getByText('Component', { exact: true })).toBeVisible()
+  // Typed technical relationship (reads-from) and provenance render.
+  await expect(panel.getByRole('button', { name: /reads from/ })).toBeVisible()
+  await expect(panel.getByText('Provenance')).toBeVisible()
 })
 
 test('node details group neighbours by dimension (knowledge vs implementation)', async ({ page }) => {
