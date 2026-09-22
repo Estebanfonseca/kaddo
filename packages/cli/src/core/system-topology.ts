@@ -6,7 +6,10 @@
 // writes after inspecting the repository, a human reviews, and Git records. Core only reads,
 // validates and normalizes it here; it never writes it and never guesses.
 
-import { parse as parseYaml } from 'yaml'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import fs from 'node:fs'
+import path from 'node:path'
+import crypto from 'node:crypto'
 import { exists, readFile, join } from '../utils/fs.js'
 import { loadMappedModules } from '../services/mapped-modules.js'
 
@@ -66,15 +69,24 @@ function strList(v: unknown): string[] {
  * reported as findings — a malformed declaration never produces a partially-wrong graph.
  */
 export function loadSystemTopology(dir: string): SystemTopology {
-  const path = join(dir, TOPOLOGY_FILE)
-  if (!exists(path)) return { entities: [], relationships: [], findings: [], declared: false }
+  const filePath = join(dir, TOPOLOGY_FILE)
+  if (!exists(filePath)) return { entities: [], relationships: [], findings: [], declared: false }
+  const parsed = parseTopologyContent(readFile(filePath), dir)
+  return { ...parsed, declared: true }
+}
 
-  let parsed: { entities?: unknown; relationships?: unknown }
+/**
+ * Parse + validate topology content (a declared file or an agent proposal). Pure and deterministic:
+ * invalid entities/relationships are dropped and reported so nothing partly-wrong reaches the graph.
+ */
+export function parseTopologyContent(raw: string, dir: string): { entities: SystemEntity[]; relationships: TechnicalRelationship[]; findings: TopologyFinding[]; sourceRevision?: string } {
+  let parsed: { entities?: unknown; relationships?: unknown; source_revision?: unknown }
   try {
-    parsed = (parseYaml(readFile(path)) ?? {}) as { entities?: unknown; relationships?: unknown }
+    parsed = (parseYaml(raw) ?? {}) as { entities?: unknown; relationships?: unknown; source_revision?: unknown }
   } catch {
-    return { entities: [], relationships: [], findings: [{ level: 'blocking', message: 'system-topology.yml could not be parsed.' }], declared: true }
+    return { entities: [], relationships: [], findings: [{ level: 'blocking', message: 'The topology could not be parsed.' }] }
   }
+  const sourceRevision = typeof parsed.source_revision === 'string' ? parsed.source_revision : undefined
 
   const findings: TopologyFinding[] = []
   const validModules = new Set<string>(['core', ...loadMappedModules(dir).map((m) => m.id)])
@@ -93,12 +105,19 @@ export function loadSystemTopology(dir: string): SystemTopology {
     if (!SYSTEM_ENTITY_KINDS.has(kind)) { findings.push({ level: 'warning', message: `Entity "${id}" has an unknown kind "${kind}"; treated as unknown.` }) }
     const moduleRaw = typeof e.module === 'string' ? e.module.trim() : undefined
     if (moduleRaw && !validModules.has(moduleRaw)) findings.push({ level: 'warning', message: `Entity "${id}" references unregistered module "${moduleRaw}".` })
-    const implementation = strList(e.implementation).filter((p) => {
+    // Accept both the declared-file format and the agent-proposal format.
+    const rawImpl = e.implementation ?? e.implementation_refs
+    const implementation = strList(rawImpl).filter((p) => {
       if (isRelative(p)) return true
       findings.push({ level: 'warning', message: `Entity "${id}" implementation ref "${p}" is not a safe relative path and was dropped.` })
       return false
     })
-    const provenance = typeof e.provenance === 'string' && PROVENANCE.has(e.provenance) ? e.provenance : undefined
+    const prov = e.provenance
+    const provOrigin = typeof prov === 'string' ? prov
+      : prov && typeof prov === 'object' && typeof (prov as Record<string, unknown>).origin === 'string' ? String((prov as Record<string, unknown>).origin)
+        : undefined
+    const provenance = provOrigin && PROVENANCE.has(provOrigin) ? provOrigin : undefined
+    const evidence = strList(e.evidence ?? (prov && typeof prov === 'object' ? (prov as Record<string, unknown>).evidence_refs : undefined)).filter(isRelative)
 
     seenIds.add(id)
     entities.push({
@@ -108,9 +127,9 @@ export function loadSystemTopology(dir: string): SystemTopology {
       ...(typeof e.purpose === 'string' && e.purpose.trim() ? { purpose: e.purpose.trim() } : {}),
       ...(moduleRaw && validModules.has(moduleRaw) ? { moduleId: moduleRaw } : {}),
       implementationRefs: implementation,
-      knowledgeRefs: strList(e.knowledge),
+      knowledgeRefs: strList(e.knowledge ?? e.knowledge_refs),
       ...(provenance ? { provenance } : {}),
-      evidence: strList(e.evidence).filter(isRelative),
+      evidence,
     })
   }
 
@@ -118,24 +137,138 @@ export function loadSystemTopology(dir: string): SystemTopology {
   const entityIds = new Set(entities.map((e) => e.id))
   const rawRels = Array.isArray(parsed.relationships) ? parsed.relationships : []
   const relationships: TechnicalRelationship[] = []
+  const seenRels = new Set<string>()
   for (const raw of rawRels) {
     if (!raw || typeof raw !== 'object') continue
     const r = raw as Record<string, unknown>
-    const from = typeof r.from === 'string' ? r.from.trim() : ''
-    const to = typeof r.to === 'string' ? r.to.trim() : ''
+    const from = typeof r.from === 'string' ? r.from.trim() : typeof r.source === 'string' ? r.source.trim() : ''
+    const to = typeof r.to === 'string' ? r.to.trim() : typeof r.target === 'string' ? r.target.trim() : ''
     const type = typeof r.type === 'string' ? r.type.trim() : ''
     if (!from || !to || !type) { findings.push({ level: 'warning', message: 'A topology relationship is missing from/to/type and was skipped.' }); continue }
     if (!TECHNICAL_RELATIONSHIP_TYPES.has(type)) { findings.push({ level: 'warning', message: `Relationship type "${type}" is not recognized and was skipped.` }); continue }
     if (!entityIds.has(from) || !entityIds.has(to)) { findings.push({ level: 'blocking', message: `Relationship ${from} → ${to} references an unknown entity endpoint.` }); continue }
-    relationships.push({ from, to, type, evidence: strList(r.evidence).filter(isRelative) })
+    const key = `${from}~${type}~${to}`
+    if (seenRels.has(key)) { findings.push({ level: 'warning', message: `Duplicate relationship ${from} ${type} ${to} was skipped.` }); continue }
+    seenRels.add(key)
+    const prov = r.provenance as Record<string, unknown> | undefined
+    relationships.push({ from, to, type, evidence: strList(r.evidence ?? prov?.evidence_refs).filter(isRelative) })
   }
 
-  return { entities, relationships, findings, declared: true }
+  return { entities, relationships, findings, ...(sourceRevision ? { sourceRevision } : {}) }
 }
 
 /** Validation entry point (agent/CLI use): the findings a review should resolve before persisting. */
 export function validateSystemTopology(dir: string): TopologyFinding[] {
   return loadSystemTopology(dir).findings
+}
+
+// --- Proposal → validate → apply (VS-100.2.1) --------------------------------
+
+export type TopologyWriteErrorCode = 'TOPOLOGY_INVALID' | 'TOPOLOGY_CONFLICT'
+export class TopologyWriteError extends Error {
+  code: TopologyWriteErrorCode
+  constructor(code: TopologyWriteErrorCode, message: string) {
+    super(message)
+    this.name = 'TopologyWriteError'
+    this.code = code
+  }
+}
+
+export type TopologyValidation = {
+  findings: TopologyFinding[]
+  blocking: number
+  warning: number
+  canApply: boolean
+  entityCount: number
+  relationshipCount: number
+}
+
+/** The current content revision of the declared topology (hash), or a stable empty marker. */
+export function topologyRevision(dir: string): string {
+  const filePath = join(dir, TOPOLOGY_FILE)
+  const raw = exists(filePath) ? readFile(filePath) : ''
+  return crypto.createHash('sha256').update(raw, 'utf-8').digest('hex')
+}
+
+/** Validate an agent proposal (YAML) deterministically — no write, no LLM, no git. */
+export function validateTopologyProposal(dir: string, proposalYaml: string): TopologyValidation {
+  const { entities, relationships, findings } = parseTopologyContent(proposalYaml, dir)
+  const blocking = findings.filter((f) => f.level === 'blocking').length
+  const warning = findings.filter((f) => f.level === 'warning').length
+  return { findings, blocking, warning, canApply: blocking === 0, entityCount: entities.length, relationshipCount: relationships.length }
+}
+
+function serializeTopology(entities: SystemEntity[], relationships: TechnicalRelationship[]): string {
+  const doc = {
+    entities: entities.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      label: e.label,
+      ...(e.purpose ? { purpose: e.purpose } : {}),
+      ...(e.moduleId ? { module: e.moduleId } : {}),
+      ...(e.implementationRefs.length ? { implementation: e.implementationRefs } : {}),
+      ...(e.knowledgeRefs.length ? { knowledge: e.knowledgeRefs } : {}),
+      ...(e.provenance ? { provenance: e.provenance } : {}),
+      ...(e.evidence.length ? { evidence: e.evidence } : {}),
+    })),
+    relationships: relationships.map((r) => ({ from: r.from, to: r.to, type: r.type, ...(r.evidence.length ? { evidence: r.evidence } : {}) })),
+  }
+  return stringifyYaml(doc)
+}
+
+function atomicWrite(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  fs.writeFileSync(tmp, content, 'utf-8')
+  try { fs.renameSync(tmp, filePath) } catch (err) { try { fs.rmSync(tmp, { force: true }) } catch { /* best effort */ } throw err }
+}
+
+export type TopologyApplyResult = { revision: string; entitiesNew: number; entitiesUpdated: number; relationshipsNew: number }
+
+/**
+ * Apply a validated proposal to the canonical topology artifact. Revalidates, checks the expected
+ * revision (stale → conflict), merges additively with the existing topology (by id — never removing
+ * unrelated entities/relationships), and writes atomically. Never runs git.
+ */
+export function applyTopologyProposal(dir: string, proposalYaml: string, expectedRevision?: string): TopologyApplyResult {
+  const validation = validateTopologyProposal(dir, proposalYaml)
+  if (!validation.canApply) throw new TopologyWriteError('TOPOLOGY_INVALID', 'The topology proposal has blocking findings and cannot be applied.')
+
+  // Conflict protection: the proposal was built against a specific Graph revision.
+  const current = topologyRevision(dir)
+  if (expectedRevision != null && expectedRevision !== current) {
+    throw new TopologyWriteError('TOPOLOGY_CONFLICT', 'The topology changed after this proposal was created. Refresh and validate the proposal again.')
+  }
+
+  const proposal = parseTopologyContent(proposalYaml, dir)
+  const existing = loadSystemTopology(dir)
+
+  // Merge entities by id (proposal updates or adds; existing untouched entities are preserved).
+  const entityMap = new Map<string, SystemEntity>()
+  for (const e of existing.entities) entityMap.set(e.id, e)
+  let entitiesNew = 0, entitiesUpdated = 0
+  for (const e of proposal.entities) {
+    if (entityMap.has(e.id)) entitiesUpdated++
+    else entitiesNew++
+    entityMap.set(e.id, e)
+  }
+
+  const relKey = (r: TechnicalRelationship) => `${r.from}~${r.type}~${r.to}`
+  const relMap = new Map<string, TechnicalRelationship>()
+  for (const r of existing.relationships) relMap.set(relKey(r), r)
+  let relationshipsNew = 0
+  for (const r of proposal.relationships) {
+    if (!relMap.has(relKey(r))) relationshipsNew++
+    relMap.set(relKey(r), r)
+  }
+
+  const raw = serializeTopology([...entityMap.values()], [...relMap.values()])
+  // Final validation of the merged result before replacing the canonical artifact.
+  const finalCheck = validateTopologyProposal(dir, raw)
+  if (!finalCheck.canApply) throw new TopologyWriteError('TOPOLOGY_INVALID', 'The merged topology is invalid; no changes were written.')
+
+  atomicWrite(join(dir, TOPOLOGY_FILE), raw)
+  return { revision: topologyRevision(dir), entitiesNew, entitiesUpdated, relationshipsNew }
 }
 
 // --- Enrichment handoff ------------------------------------------------------
@@ -169,19 +302,22 @@ export function buildTopologyEnrichmentHandoff(dir: string, projectName: string)
   }
   lines.push(
     '',
-    `Write the result to ${TOPOLOGY_FILE} as declared entities and relationships. For each entity`,
+    'Build a topology PROPOSAL first — do not write canonical metadata directly. For each entity',
     'capture, only when supported by evidence:',
     '- a stable id and semantic kind (application/service/component/api/interface/datastore/queue/job/external-system);',
     '- a responsibility/purpose (what it does, not how);',
     '- the owning module/repository;',
     '- implementation references (relative paths);',
-    '- relevant Knowledge references (capability/ADR ids), not Kaddo operational assets.',
+    '- relevant Knowledge references (capability/ADR ids), not Kaddo operational assets;',
+    '- provenance/evidence.',
     '',
     'Capture evidence-backed technical relationships: contains, calls, depends-on, reads-from,',
-    'writes-to, integrates-with, runs-on. Preserve unknowns when evidence is insufficient.',
+    'writes-to, integrates-with, runs-on. Preserve Unknown when evidence is insufficient.',
     '',
-    'Review the proposed graph metadata (duplicate ids, dangling relationships, unknown modules,',
-    'invalid references) before writing.',
+    'Validate the proposal through Kaddo before applying it. Do not write canonical topology metadata',
+    `unless (1) Kaddo validation succeeds and (2) the human explicitly confirms the write. The canonical`,
+    `artifact is ${TOPOLOGY_FILE}; Core validates and applies it — do not hand-edit it.`,
+    '',
     'Do not implement application changes. Do not run mutating Git operations.',
   )
   return {

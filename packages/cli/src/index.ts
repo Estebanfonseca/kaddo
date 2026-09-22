@@ -20,6 +20,7 @@ import { runModulesDiscover, runModulesValidate } from './commands/modules-disco
 import { runBootstrap } from './commands/bootstrap.js'
 import { runCapsuleExport, runCapsuleAdd } from './commands/capsule.js'
 import { runGraphExport } from './commands/graph.js'
+import { runTopologyValidate, runTopologyApply } from './commands/topology.js'
 import { runReportImpact } from './commands/report.js'
 import { runSavings, runSavingsInit } from './commands/savings.js'
 import { runDrift } from './commands/drift.js'
@@ -113,6 +114,25 @@ graphCmd
   .option('--format <format>', 'Output format: json, mermaid (default: both)')
   .action((opts: { scope?: string; format?: string }) => {
     runGraphExport(opts)
+  })
+
+const topologyCmd = program
+  .command('topology')
+  .description('Validate and apply a semantic system topology proposal (agent proposes, human confirms, Core applies)')
+
+topologyCmd
+  .command('validate <file>')
+  .description('Validate a topology proposal file deterministically (no write)')
+  .action((file: string) => {
+    runTopologyValidate(file)
+  })
+
+topologyCmd
+  .command('apply <file>')
+  .description('Apply a validated topology proposal to the canonical artifact after human confirmation')
+  .option('-y, --yes', 'Skip the confirmation prompt (for already-approved automation)')
+  .action((file: string, opts: { yes?: boolean }) => {
+    runTopologyApply(file, opts)
   })
 
 const reportCmd = program

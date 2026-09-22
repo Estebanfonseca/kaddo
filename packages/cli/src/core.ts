@@ -70,11 +70,17 @@ export {
   loadSystemTopology,
   validateSystemTopology,
   buildTopologyEnrichmentHandoff,
+  validateTopologyProposal,
+  applyTopologyProposal,
+  topologyRevision,
+  TopologyWriteError,
   TOPOLOGY_FILE,
   type SystemEntity,
   type TechnicalRelationship,
   type SystemTopology,
   type TopologyFinding,
   type TopologyEnrichmentHandoff,
+  type TopologyValidation,
+  type TopologyApplyResult,
 } from './core/system-topology.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'
