@@ -24,6 +24,6 @@
     "learning-capture"
   ],
   "homepage": "https://kaddo.trycatch.tv/es/getting-started/",
-  "repository": "https://github.com/Kaddo-kdd/tree/main/agent-plugin",
+  "repository": "https://github.com/Kaddo-kdd/kaddo/tree/main/agent-plugin",
   "license": "MIT"
 }
