@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { Command } from 'commander'
+import { cwd } from './utils/fs.js'
 import { runInit } from './commands/init.js'
 import { runScan } from './commands/scan.js'
 import { runCreate } from './commands/create.js'
@@ -21,6 +22,14 @@ import { runBootstrap } from './commands/bootstrap.js'
 import { runCapsuleExport, runCapsuleAdd } from './commands/capsule.js'
 import { runGraphExport } from './commands/graph.js'
 import { runTopologyValidate, runTopologyApply } from './commands/topology.js'
+import {
+  runIntegrationsList,
+  runIntegrationsStatus,
+  runIntegrationsVerify,
+  runIntegrationsWorkItems,
+  runIntegrationsWorkItem,
+  runIntegrationsImport,
+} from './commands/integrations.js'
 import { runReportImpact } from './commands/report.js'
 import { runSavings, runSavingsInit } from './commands/savings.js'
 import { runDrift } from './commands/drift.js'
@@ -133,6 +142,55 @@ topologyCmd
   .option('-y, --yes', 'Skip the confirmation prompt (for already-approved automation)')
   .action((file: string, opts: { yes?: boolean }) => {
     runTopologyApply(file, opts)
+  })
+
+const integrationsCmd = program
+  .command('integrations')
+  .description('Connect Kaddo to external work systems (read-first; import requires human confirmation)')
+
+integrationsCmd
+  .command('list')
+  .description('List configured integrations and their capabilities')
+  .option('--json', 'Output JSON')
+  .action((opts: { json?: boolean }) => runIntegrationsList(cwd(), opts))
+
+integrationsCmd
+  .command('status')
+  .description('Verify each enabled integration and report its connection status')
+  .option('--json', 'Output JSON')
+  .action(async (opts: { json?: boolean }) => { await runIntegrationsStatus(cwd(), opts) })
+
+integrationsCmd
+  .command('verify <id>')
+  .description('Verify one integration can actually connect (distinguishes configured from usable)')
+  .option('--json', 'Output JSON')
+  .action(async (id: string, opts: { json?: boolean }) => { await runIntegrationsVerify(cwd(), id, opts) })
+
+integrationsCmd
+  .command('work-items <id>')
+  .description('List external work items from an integration (paginated, read-only)')
+  .option('--json', 'Output JSON')
+  .option('--cursor <cursor>', 'Pagination cursor from a previous page')
+  .option('--page-size <n>', 'Items per page')
+  .option('--status <status>', 'Filter by external status')
+  .option('--query <text>', 'Free-text filter')
+  .action(async (id: string, opts: { json?: boolean; cursor?: string; pageSize?: string; status?: string; query?: string }) => {
+    await runIntegrationsWorkItems(cwd(), id, opts)
+  })
+
+integrationsCmd
+  .command('work-item <id> <external-id>')
+  .description('Read a single external work item (read-only)')
+  .option('--json', 'Output JSON')
+  .action(async (id: string, externalId: string, opts: { json?: boolean }) => { await runIntegrationsWorkItem(cwd(), id, externalId, opts) })
+
+integrationsCmd
+  .command('import <id> <external-id>')
+  .description('Preview and, after confirmation, import an external work item as a Draft Work Item')
+  .option('--type <type>', 'Kaddo Work Item type (required to create; never inferred from the external type)')
+  .option('-y, --yes', 'Skip the confirmation prompt (for already-approved automation)')
+  .action(async (id: string, externalId: string, opts: { type?: string; yes?: boolean }) => {
+    await runIntegrationsImport(cwd(), id, externalId, opts)
   })
 
 const reportCmd = program

@@ -19,6 +19,14 @@ import {
   buildRefinementHandoff as coreBuildRefinementHandoff,
   getSystemMapProjection as coreGetSystemMapProjection,
   buildTopologyEnrichmentHandoff as coreBuildTopologyHandoff,
+  listIntegrations as coreListIntegrations,
+  verifyIntegration as coreVerifyIntegration,
+  listExternalWorkItems as coreListExternalWorkItems,
+  getExternalWorkItem as coreGetExternalWorkItem,
+  previewImport as corePreviewImport,
+  importExternalWorkItem as coreImportExternalWorkItem,
+  IntegrationError,
+  IntegrationServiceError,
   WorkItemWriteError,
   exists,
   join,
@@ -341,5 +349,75 @@ export class CoreError extends Error {
   constructor(public code: string, message: string) {
     super(message)
     this.name = 'CoreError'
+  }
+}
+
+// --- Integrations (VS-102) ---------------------------------------------------
+// The Admin surface over the Integration Adapter Foundation. Reads never mutate; import always goes
+// through the human-confirmed Core boundary. Errors are mapped to safe CoreError codes — secrets and
+// raw provider messages are never surfaced.
+
+function mapIntegrationError(err: unknown): never {
+  if (err instanceof IntegrationError) throw new CoreError(err.code, err.safeMessage)
+  if (err instanceof IntegrationServiceError) throw new CoreError(err.code, err.message)
+  throw err as Error
+}
+
+function assertExternalId(externalId: string): void {
+  if (!externalId || externalId.includes('/') || externalId.includes('\\') || externalId.includes('..')) {
+    throw new CoreError('INVALID_EXTERNAL_ID', 'Invalid external work item identifier.')
+  }
+}
+
+export function getIntegrations(dir: string): ReturnType<typeof coreListIntegrations> {
+  return coreListIntegrations(dir)
+}
+
+export async function getIntegrationStatus(dir: string, id: string): Promise<Awaited<ReturnType<typeof coreVerifyIntegration>>> {
+  try {
+    return await coreVerifyIntegration(dir, id)
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export async function getExternalWorkItems(
+  dir: string,
+  id: string,
+  opts: { cursor?: string; pageSize?: number; status?: string; query?: string },
+): Promise<Awaited<ReturnType<typeof coreListExternalWorkItems>>> {
+  try {
+    return await coreListExternalWorkItems(dir, id, { cursor: opts.cursor, pageSize: opts.pageSize, filters: { status: opts.status, query: opts.query } })
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export async function getExternalWorkItemDetail(dir: string, id: string, externalId: string): Promise<Awaited<ReturnType<typeof coreGetExternalWorkItem>>> {
+  assertExternalId(externalId)
+  try {
+    return await coreGetExternalWorkItem(dir, id, externalId)
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export async function previewIntegrationImport(dir: string, id: string, externalId: string, opts: { type?: string }): Promise<Awaited<ReturnType<typeof corePreviewImport>>> {
+  assertExternalId(externalId)
+  try {
+    return await corePreviewImport(dir, id, externalId, { type: opts.type })
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+/** Mutating, human-confirmed (the UI confirm) import into a canonical Draft. Requires an explicit type. */
+export async function importIntegrationWorkItem(dir: string, id: string, externalId: string, opts: { type: string }): Promise<Awaited<ReturnType<typeof coreImportExternalWorkItem>>> {
+  assertExternalId(externalId)
+  try {
+    return await coreImportExternalWorkItem(dir, id, externalId, { type: opts.type })
+  } catch (err) {
+    if (err instanceof WorkItemWriteError) throw new CoreError(err.code, err.message)
+    mapIntegrationError(err)
   }
 }

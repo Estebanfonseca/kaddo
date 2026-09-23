@@ -15,6 +15,8 @@ export type WorkItemSource = {
   title?: string
   context?: string
   provider?: string
+  /** The Kaddo integration id this Work Item was imported through (VS-102), when external. */
+  integration?: string
   url?: string
   imported_at?: string
   synced_at?: string
@@ -43,6 +45,7 @@ export function parseWorkItemSource(frontmatter: Record<string, unknown>): WorkI
       title: optStr(obj.title) ?? optStr(frontmatter.source_title),
       context: optStr(obj.context) ?? optStr(frontmatter.source_context),
       provider: optStr(obj.provider) ?? optStr(frontmatter.source_provider),
+      integration: optStr(obj.integration) ?? optStr(frontmatter.source_integration),
       url: optStr(obj.url) ?? optStr(frontmatter.source_url),
       imported_at: optStr(obj.imported_at) ?? optStr(frontmatter.source_imported_at),
       synced_at: optStr(obj.synced_at) ?? optStr(frontmatter.source_synced_at),

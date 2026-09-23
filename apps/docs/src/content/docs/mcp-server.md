@@ -121,6 +121,20 @@ does not mean "no impact": traversal is bounded and coverage may be partial.
 agent inspects each candidate and classifies it as *affected*, *reviewed-not-affected* or *unknown*,
 preserving the reason; a human confirms before the classification is written to the Work Item.
 
+## Integration tools
+
+Read-only access to the [Integration Adapter Foundation](/integrations/) — external work systems such
+as GitHub Issues, Jira or Azure DevOps. Reading an external item never creates a Kaddo Work Item;
+**import is a separate, human-confirmed action** and is intentionally not exposed over MCP. Secrets
+are never returned (only the names of the environment variables a credential references).
+
+| Tool | Purpose |
+|---|---|
+| `kaddo_integrations_list` | List configured integrations and their capabilities. |
+| `kaddo_integrations_status` | Verify integrations and report connection status (available / unauthorized / …). |
+| `kaddo_integrations_work_items` | List external work items from an integration (paginated). |
+| `kaddo_integrations_work_item` | Read a single external work item. |
+
 ## Derived tools (write only under `.kaddo/`)
 
 When a derived artifact is missing or stale, these tools regenerate it in place — using the same

@@ -42,6 +42,7 @@ export {
   transitionWorkItem,
   WorkItemWriteError,
   type WorkItemInput,
+  type WorkItemSourceInput,
   type WorkItemEditModel,
   type WorkItemCoverageInput,
   type WorkItemImpactInput,
@@ -95,4 +96,33 @@ export {
   type TopologyValidation,
   type TopologyApplyResult,
 } from './core/system-topology.js'
+export {
+  listIntegrations,
+  verifyIntegration,
+  listExternalWorkItems,
+  getExternalWorkItem,
+  findLinkedWorkItem,
+  previewImport,
+  importExternalWorkItem,
+  integrationRegistry,
+  IntegrationServiceError,
+  INTEGRATIONS_FILE,
+  type IntegrationSummary,
+  type VerifyResult,
+  type ImportPreviewResult,
+  type ImportResult,
+  type LinkedWorkItem,
+} from './services/integrations.js'
+export {
+  IntegrationError,
+  type IntegrationErrorCode,
+  type ExternalWorkItem,
+  type ExternalWorkItemPage,
+  type ExternalWorkItemFilters,
+  type ImportPreview,
+  type IntegrationStatus,
+  type IntegrationCapabilities,
+  type IntegrationAdapterMetadata,
+  type ConnectionResult,
+} from '../../integrations/src/index.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'

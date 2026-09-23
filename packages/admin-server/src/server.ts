@@ -25,6 +25,12 @@ import {
   getRefinementHandoff,
   getSystemMap,
   getTopologyHandoff,
+  getIntegrations,
+  getIntegrationStatus,
+  getExternalWorkItems,
+  getExternalWorkItemDetail,
+  previewIntegrationImport,
+  importIntegrationWorkItem,
   CoreError,
 } from './core-adapter.js'
 import {
@@ -225,6 +231,46 @@ export async function createAdminServer(opts: AdminServerOptions) {
   app.get('/api/v1/admin/findings', coreRoute(getFindings))
   app.get('/api/v1/admin/system', coreRoute(getSystemMap))
   app.get('/api/v1/admin/system/topology-handoff', coreRoute(getTopologyHandoff))
+
+  // Integrations (VS-102). Reads are safe; import is a mutating, human-confirmed action (POST, so it
+  // is covered by the same-origin write guard). No secrets ever cross this boundary.
+  const asyncCore = async <T>(reply: import('fastify').FastifyReply, fn: () => Promise<T>) => {
+    try {
+      return await fn()
+    } catch (err) {
+      if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } })
+      throw err
+    }
+  }
+  app.get('/api/v1/admin/integrations', coreRoute(getIntegrations))
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/status', async (request, reply) =>
+    asyncCore(reply, () => getIntegrationStatus(projectDir, request.params.id)),
+  )
+  app.get<{ Params: { id: string }; Querystring: { cursor?: string; pageSize?: string; status?: string; query?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items',
+    async (request, reply) => asyncCore(reply, () => getExternalWorkItems(projectDir, request.params.id, {
+      cursor: request.query.cursor,
+      pageSize: request.query.pageSize ? Number.parseInt(request.query.pageSize, 10) : undefined,
+      status: request.query.status,
+      query: request.query.query,
+    })),
+  )
+  app.get<{ Params: { id: string; externalId: string }; Querystring: { type?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items/:externalId',
+    async (request, reply) => asyncCore(reply, () => getExternalWorkItemDetail(projectDir, request.params.id, request.params.externalId)),
+  )
+  app.get<{ Params: { id: string; externalId: string }; Querystring: { type?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items/:externalId/import-preview',
+    async (request, reply) => asyncCore(reply, () => previewIntegrationImport(projectDir, request.params.id, request.params.externalId, { type: request.query.type })),
+  )
+  app.post<{ Params: { id: string; externalId: string }; Body: { type?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items/:externalId/import',
+    async (request, reply) => {
+      const type = request.body?.type
+      if (!type) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'A Kaddo Work Item type is required to import.' } })
+      return asyncCore(reply, () => importIntegrationWorkItem(projectDir, request.params.id, request.params.externalId, { type }))
+    },
+  )
   app.get('/api/v1/admin/knowledge/inventory', coreRoute(getKnowledgeInventory))
   app.get<{ Params: { artifactId: string } }>('/api/v1/admin/knowledge/artifact/:artifactId', async (request) => {
     try {

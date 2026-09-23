@@ -268,6 +268,32 @@ export type TopologyEnrichmentHandoff = { projectName: string; recommendedAgent:
 
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
+// --- Integrations (VS-102) ---------------------------------------------------
+export type IntegrationCapabilities = { workItems: { list: boolean; read: boolean; import: boolean; write?: boolean; statusSync?: boolean; comments?: boolean; webhooks?: boolean } }
+export type IntegrationStatusValue = 'configured' | 'available' | 'unavailable' | 'unauthorized' | 'invalid-config' | 'disabled'
+export type IntegrationSummary = {
+  id: string
+  adapter: string
+  enabled: boolean
+  status: IntegrationStatusValue
+  displayName: string
+  capabilities: IntegrationCapabilities | null
+  credentialRefs: string[]
+  findings: { level: 'blocking' | 'warning'; message: string }[]
+}
+export type IntegrationStatusResult = { id: string; status: IntegrationStatusValue; connection: unknown; missingCredentials: string[]; message?: string }
+export type ExternalWorkItem = {
+  externalId: string; provider: string; title: string; description?: string; type?: string; status?: string; url?: string
+  labels?: string[]; createdAt?: string; updatedAt?: string
+}
+export type ExternalWorkItemPage = { items: ExternalWorkItem[]; hasMore: boolean; nextCursor?: string }
+export type ImportPreview = {
+  source: { provider: string; integration: string; externalId: string; url?: string; identityKey: string; displayKey: string }
+  capturedIntent: string; description?: string; externalType?: string; externalStatus?: string; kaddoStatus: 'draft'; kaddoType: string | null; writes: false
+}
+export type ImportPreviewResult = { preview: ImportPreview; duplicate: { workItemId: string; title: string } | null }
+export type ImportResult = { workItemId: string; created: boolean; duplicateOf?: string; path?: string }
+
 function toQuery(filters: WorkItemFilters): string {
   const params = new URLSearchParams()
   if (filters.status && filters.status !== 'all') params.set('status', filters.status)
@@ -306,4 +332,20 @@ export const api = {
   // Refinement handoff (VS-099.1) — read-only; refinement happens externally.
   getRefinementHandoff: (workItemId: string) =>
     fetchApi<RefinementHandoff>(`/work-items/${encodeURIComponent(workItemId)}/refinement-handoff`),
+  // Integrations (VS-102) — reads are safe; import is human-confirmed (the button) and creates a Draft.
+  getIntegrations: () => fetchApi<IntegrationSummary[]>('/integrations'),
+  getIntegrationStatus: (id: string) => fetchApi<IntegrationStatusResult>(`/integrations/${encodeURIComponent(id)}/status`),
+  getExternalWorkItems: (id: string, opts: { cursor?: string; pageSize?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.cursor) p.set('cursor', opts.cursor)
+    if (opts.pageSize) p.set('pageSize', String(opts.pageSize))
+    const q = p.toString()
+    return fetchApi<ExternalWorkItemPage>(`/integrations/${encodeURIComponent(id)}/work-items${q ? `?${q}` : ''}`)
+  },
+  getExternalWorkItem: (id: string, externalId: string) =>
+    fetchApi<ExternalWorkItem>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}`),
+  getImportPreview: (id: string, externalId: string, type?: string) =>
+    fetchApi<ImportPreviewResult>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}/import-preview${type ? `?type=${encodeURIComponent(type)}` : ''}`),
+  importExternalWorkItem: (id: string, externalId: string, type: string) =>
+    mutateApi<ImportResult>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}/import`, 'POST', { type }),
 }

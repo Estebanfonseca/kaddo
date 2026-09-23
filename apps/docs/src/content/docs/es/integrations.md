@@ -1,0 +1,207 @@
+---
+title: Integraciones
+description: Conecta Kaddo con sistemas de trabajo externos (GitHub Issues, Jira, Azure DevOps, Linear, …) mediante una Integration Adapter Foundation agnóstica del proveedor — sin convertir ningún sistema externo en la fuente de verdad.
+---
+
+Muchos equipos capturan primero sus solicitudes en un sistema externo — GitHub Issues, Jira, Azure
+DevOps, Linear. La **Integration Adapter Foundation** de Kaddo conecta con esos sistemas a través de
+una única frontera agnóstica del proveedor y normaliza lo que encuentra en un modelo neutral que
+Kaddo puede consumir.
+
+La regla que rige todo aquí:
+
+> Las herramientas externas pueden **originar** trabajo y **aportar** contexto. Kaddo normaliza esa
+> información, conserva su trazabilidad y mantiene su **propio Work Item como fuente de verdad** para
+> el desarrollo.
+
+```text
+Sistema de trabajo externo
+        ↓
+Integration Adapter        (normaliza los datos del proveedor)
+        ↓
+External Work Item normalizado
+        ↓
+Import Preview             (solo lectura)
+        ↓
+Confirmación humana
+        ↓
+Kaddo Core                 (crea un Draft canónico)
+        ↓
+Work Item canónico         ← la fuente de verdad
+```
+
+## Integration Adapters vs Agent Adapters
+
+Kaddo usa la palabra *adapter* en dos lugares no relacionados. Mantenlos distintos:
+
+| | Proyecta hacia | Ejemplos |
+|---|---|---|
+| **Agent Adapters** | archivos nativos de agentes | `AGENTS.md`, `CLAUDE.md` |
+| **Integration Adapters** | sistemas de trabajo externos | GitHub, Jira, Azure DevOps, Linear |
+
+Esta página trata de los **Integration Adapters**.
+
+## Arquitectura
+
+```text
+                 @kaddo/core           (dominio: Work Items, Knowledge, Graph)
+                      ▲
+                      │ modelo normalizado
+                      │
+              @kaddo/integrations      (contrato · registry · modelos · config · errores)
+                      ▲
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+       GitHub        Jira    Azure DevOps    (adapters concretos futuros)
+```
+
+- **`@kaddo/core` es agnóstico del proveedor.** Nunca importa un SDK de vendor ni conoce campos de
+  GitHub, tipos de issue de Jira o estados de Linear.
+- **`@kaddo/integrations`** posee el contrato de adapter, el registry, los modelos normalizados, el
+  modelo de configuración y de referencias a secretos, el modelo de errores/estado, el mapeo del
+  import preview y un adapter de referencia. **No** contiene reglas de dominio de Work Items,
+  semántica del Graph ni reglas de lifecycle — eso vive en Core.
+- El **integration service** (en la capa CLI/Admin) es el único lugar donde las lecturas externas
+  cruzan hacia Core, y el único lugar donde un import materializa un Work Item.
+
+## Contrato del adapter
+
+```ts
+interface IntegrationAdapter {
+  readonly id: string
+  readonly metadata: IntegrationAdapterMetadata
+  readonly capabilities: IntegrationCapabilities
+  verifyConnection(context): Promise<ConnectionResult>
+  listWorkItems(request): Promise<ExternalWorkItemPage>   // paginado
+  getWorkItem(request): Promise<ExternalWorkItem | null>
+}
+```
+
+Los adapters **no** se asumen equivalentes. Cada uno declara sus **capabilities** para que la UI
+pueda preguntar *"¿qué puede hacer este adapter?"* en vez de asumir que todo está soportado. La
+línea base de VS-102 exige `verifyConnection`, `list`, `read` e `import`; `write`, `statusSync`,
+`comments` y `webhooks` son capacidades futuras.
+
+Los proveedores se resuelven mediante un **registry** — nunca con un `switch (provider)` hardcoded.
+Agregar un proveedor es un registro, no un cambio en Core, Admin o MCP.
+
+## Modelo normalizado
+
+Cada elemento del proveedor se convierte en un `ExternalWorkItem` neutral — *lo que Kaddo necesita*,
+no una copia fiel del modelo del proveedor. El detalle específico puede viajar en `rawMetadata` pero
+nunca domina.
+
+Cada elemento tiene una **identidad externa** estable — `integration + externalId` — usada para la
+detección de duplicados y el linking. Nunca depende del título visible.
+
+## Configuración y secretos
+
+Declara integraciones en `.kaddo/integrations.yml`. La configuración solo lleva cómo **encontrar**
+una credencial, nunca la credencial en sí:
+
+```yaml
+integrations:
+  - id: github-dotear
+    adapter: github
+    enabled: true
+    config:
+      owner: trycatch-tv
+      repository: dotear
+    credentials:
+      token_env: GITHUB_TOKEN     # una referencia — se resuelve solo en runtime
+```
+
+Un secreto inline (`token: ghp_…`) es **rechazado** por la validación. Los secretos se resuelven
+desde el entorno solo durante la ejecución y **nunca** aparecen en Work Items, Knowledge, el Graph,
+context packs, la API de Admin, la salida de MCP, logs ni telemetría.
+
+## Estado y conexión
+
+Dos ejes que nunca deben confundirse: el **estado de conexión de la integración** y el **estado del
+lifecycle de un Work Item**. `verifyConnection()` distingue *"adapter instalado"* de *"integración
+realmente utilizable"*:
+
+```text
+configured · available · unavailable · unauthorized · invalid-config · disabled
+```
+
+Los errores se normalizan (`INTEGRATION_UNAUTHORIZED`, `INTEGRATION_RATE_LIMITED`,
+`INTEGRATION_TIMEOUT`, `INTEGRATION_UNAVAILABLE`, …). Los mensajes crudos del proveedor nunca se
+exponen.
+
+## Semántica del import
+
+Leer no es importar. Ver `EXT-001` **no** crea un Work Item — el import es una acción explícita y
+confirmada por una persona:
+
+1. El **preview** (solo lectura) muestra el origen, el captured intent y *"No project files have been
+   modified yet."*
+2. **Confirmas.** Tú eliges el **tipo** de Work Item Kaddo — nunca se infiere del tipo externo.
+3. El **import** reutiliza `createWorkItem` de Core y produce un **Draft** (sin importar el estado
+   externo). El origen externo se registra como **provenance**, no como la verdad:
+
+   ```yaml
+   source:
+     type: external
+     provider: github
+     integration: github-dotear
+     id: "231"
+     url: https://github.com/trycatch-tv/dotear/issues/231
+   ```
+
+Reimportar la misma identidad externa no crea un duplicado — Kaddo devuelve el Work Item existente.
+Tras el import, el refinamiento y el análisis de impacto ocurren sobre el Work Item **Kaddo**, y este
+sigue funcionando aunque el proveedor externo deje de estar disponible.
+
+## CLI
+
+```bash
+kaddo integrations list                       # integraciones configuradas + capabilities
+kaddo integrations status                     # verifica cada una y reporta el estado de conexión
+kaddo integrations verify <id>                # verifica una integración
+kaddo integrations work-items <id>            # lista elementos externos (paginado)
+kaddo integrations work-item <id> <ext-id>    # lee un elemento externo
+kaddo integrations import <id> <ext-id> --type <feature|fix|…>   # preview → confirmación → Draft
+```
+
+Los comandos de solo lectura soportan `--json`. El import siempre hace preview y pide confirmación
+antes de que Core cree algo.
+
+## MCP
+
+`@kaddo/mcp` expone herramientas de solo lectura — `kaddo_integrations_list`,
+`kaddo_integrations_status`, `kaddo_integrations_work_items`, `kaddo_integrations_work_item`. Leer un
+elemento externo mediante MCP nunca materializa un Work Item Kaddo; el import sigue siendo una acción
+confirmada por una persona.
+
+## Adapter de referencia (mock)
+
+Kaddo incluye un adapter **`mock`** determinístico y offline que ejercita todo el contrato — registry,
+conexión, listado, paginación, lectura, normalización y simulación de errores — sin red ni
+credenciales. Es la referencia contra la que validar un adapter custom.
+
+```yaml
+integrations:
+  - id: mock-work-source
+    adapter: mock
+    enabled: true
+    config:
+      simulate: available   # o unauthorized · rate-limited · unavailable · timeout
+```
+
+## Crear un adapter custom
+
+1. **Implementa** el contrato `IntegrationAdapter`.
+2. **Declara** tus capabilities con honestidad.
+3. **Normaliza** los datos del proveedor a `ExternalWorkItem` (los extras en `rawMetadata`).
+4. **Registra** el adapter en el registry.
+5. **Valida** la configuración; referencia los secretos por variable de entorno, nunca los guardes.
+6. **Nunca** escribas artifacts de Kaddo directamente — devuelve datos normalizados y deja que el
+   integration service y Core sean dueños de la materialización.
+
+## Fuera de alcance (se construye sobre esta foundation)
+
+Los adapters de proveedores en producción, la sincronización bidireccional, el polling, los webhooks,
+la sincronización de estado/comentarios/adjuntos, el push o la actualización de issues externos y la
+UI de OAuth externo **no** forman parte de la foundation. Se construyen encima — sin rediseñar el
+modelo de integración.

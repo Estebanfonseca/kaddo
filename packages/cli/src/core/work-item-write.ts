@@ -408,7 +408,23 @@ function captureBody(title: string, type: string, answers: Record<string, string
   return out.join('\n') + '\n'
 }
 
-export function createWorkItem(dir: string, opts: { intent: string; type: string; answers?: Record<string, string> }): { id: string; path: string; revision: string } {
+/**
+ * External-origin metadata for an imported Work Item (VS-102). Describes where the request came from
+ * — never where the current truth lives. Contains no secrets. Written verbatim into `source:`.
+ */
+export type WorkItemSourceInput = {
+  type: string
+  provider?: string
+  integration?: string
+  id?: string
+  url?: string
+  imported_at?: string
+}
+
+export function createWorkItem(
+  dir: string,
+  opts: { intent: string; type: string; answers?: Record<string, string>; source?: WorkItemSourceInput },
+): { id: string; path: string; revision: string } {
   const intent = opts.intent.trim()
   if (!intent) throw new WorkItemWriteError('INVALID_INPUT', 'An intent or summary is required.')
   const type = normalizeType(opts.type.trim()) ?? ''
@@ -417,6 +433,9 @@ export function createWorkItem(dir: string, opts: { intent: string; type: string
   const id = nextWorkItemId(dir)
   const title = intent.split(/\r?\n/)[0].trim().slice(0, 120)
   const today = new Date().toISOString().split('T')[0]
+  const source: Record<string, unknown> = opts.source
+    ? { ...opts.source, inferred: false }
+    : { type: 'manual', inferred: false }
   const data: Record<string, unknown> = {
     type,
     id,
@@ -424,7 +443,7 @@ export function createWorkItem(dir: string, opts: { intent: string; type: string
     status: 'draft',
     work_type: type,
     created_at: today,
-    source: { type: 'manual', inferred: false },
+    source,
     generated_by: 'kaddo-admin',
     affected_modules: [],
     summary: intent,

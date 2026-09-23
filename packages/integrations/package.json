@@ -1,0 +1,31 @@
+{
+  "name": "@kaddo/integrations",
+  "version": "3.82.0",
+  "description": "Kaddo Integration Adapter Foundation: a provider-agnostic contract, registry and normalized models for connecting Kaddo to external work systems. Never the source of truth.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsup": "^8.1.0",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
