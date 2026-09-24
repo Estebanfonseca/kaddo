@@ -165,6 +165,7 @@ export default defineConfig({
             { label: 'Knowledge Capsules', translations: { es: 'Knowledge Capsules' }, slug: 'knowledge-capsules' },
             { label: 'Knowledge Graph Export', translations: { es: 'Exportar el grafo de conocimiento' }, slug: 'knowledge-graph-export' },
             { label: 'MCP Server', translations: { es: 'Servidor MCP' }, slug: 'mcp-server' },
+            { label: 'Integrations', translations: { es: 'Integraciones' }, slug: 'integrations' },
             { label: 'Impact Report', translations: { es: 'Reporte de impacto' }, slug: 'impact-report' },
             { label: 'Savings Report', translations: { es: 'Reporte de ahorro' }, slug: 'savings-report' },
             { label: 'Drift Report', translations: { es: 'Reporte de drift' }, slug: 'drift-report' },

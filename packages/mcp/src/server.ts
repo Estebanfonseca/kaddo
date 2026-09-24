@@ -38,6 +38,12 @@ import {
   systemImpactCandidatesTool,
 } from './system.js'
 import {
+  integrationsListTool,
+  integrationsStatusTool,
+  integrationsWorkItemsTool,
+  integrationsWorkItemTool,
+} from './integrations.js'
+import {
   generateContext,
   generateExplain,
   generateUnderstand,
@@ -69,6 +75,17 @@ function guarded(root: string, fn: () => ToolResult): ToolResult {
   try {
     assertKaddoProject(root)
     return fn()
+  } catch (err) {
+    if (err instanceof KaddoMcpError) return { ok: false, message: err.message }
+    throw err
+  }
+}
+
+/** Async variant of `guarded` for tools that perform I/O (e.g. external integration reads). */
+async function guardedAsync(root: string, fn: () => Promise<ToolResult>): Promise<ToolResult> {
+  try {
+    assertKaddoProject(root)
+    return await fn()
   } catch (err) {
     if (err instanceof KaddoMcpError) return { ok: false, message: err.message }
     throw err
@@ -345,6 +362,48 @@ export function createServer(root: string): McpServer {
       },
     },
     async (args) => toolText(guarded(root, () => systemImpactCandidatesTool(root, args)))
+  )
+
+  // --- Integrations (read-only, VS-102) ---
+  const INTEGRATION_READ_NOTE =
+    'Read-only. Reading external items never creates a Kaddo Work Item; import is a separate, human-confirmed action.'
+  server.registerTool(
+    'kaddo_integrations_list',
+    { title: 'List integrations', description: `List configured external-work-system integrations and their capabilities. ${INTEGRATION_READ_NOTE}`, inputSchema: {} },
+    async () => toolText(guarded(root, () => integrationsListTool(root)))
+  )
+  server.registerTool(
+    'kaddo_integrations_status',
+    {
+      title: 'Integration status',
+      description: `Verify integrations and report connection status (available/unauthorized/unavailable/…). Never returns secrets. ${INTEGRATION_READ_NOTE}`,
+      inputSchema: { id: z.string().optional() },
+    },
+    async (args) => toolText(await guardedAsync(root, () => integrationsStatusTool(root, args)))
+  )
+  server.registerTool(
+    'kaddo_integrations_work_items',
+    {
+      title: 'List external work items',
+      description: `List external work items from an integration (paginated). ${INTEGRATION_READ_NOTE}`,
+      inputSchema: {
+        id: z.string(),
+        cursor: z.string().optional(),
+        pageSize: z.number().int().positive().optional(),
+        status: z.string().optional(),
+        query: z.string().optional(),
+      },
+    },
+    async (args) => toolText(await guardedAsync(root, () => integrationsWorkItemsTool(root, args)))
+  )
+  server.registerTool(
+    'kaddo_integrations_work_item',
+    {
+      title: 'Read an external work item',
+      description: `Read a single external work item by id. ${INTEGRATION_READ_NOTE}`,
+      inputSchema: { id: z.string(), externalId: z.string() },
+    },
+    async (args) => toolText(await guardedAsync(root, () => integrationsWorkItemTool(root, args)))
   )
 
   // --- Per-skill resources (kaddo://skills/<id>) — VS-059 ---

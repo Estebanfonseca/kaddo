@@ -25,6 +25,25 @@ import {
   getRefinementHandoff,
   getSystemMap,
   getTopologyHandoff,
+  getIntegrations,
+  getIntegrationDetail,
+  getIntegrationSecretStatusAdmin,
+  getAvailableIntegrationTypesAdmin,
+  createIntegrationAdmin,
+  updateIntegrationAdmin,
+  deleteIntegrationAdmin,
+  enableIntegrationAdmin,
+  disableIntegrationAdmin,
+  setIntegrationSecretAdmin,
+  removeIntegrationSecretAdmin,
+  getIntegrationStatus,
+  getExternalWorkItems,
+  getExternalWorkItemDetail,
+  previewIntegrationImport,
+  importIntegrationWorkItem,
+  discoverExternalWorkItemsAdmin,
+  getIntegrationFiltersAdmin,
+  updateIntegrationFiltersAdmin,
   CoreError,
 } from './core-adapter.js'
 import {
@@ -225,6 +244,135 @@ export async function createAdminServer(opts: AdminServerOptions) {
   app.get('/api/v1/admin/findings', coreRoute(getFindings))
   app.get('/api/v1/admin/system', coreRoute(getSystemMap))
   app.get('/api/v1/admin/system/topology-handoff', coreRoute(getTopologyHandoff))
+
+  // Integrations (VS-102 + VS-103). Reads are safe; writes are covered by the same-origin guard.
+  // No secrets ever cross this boundary — only configured/not-configured status.
+  const asyncCore = async <T>(reply: import('fastify').FastifyReply, fn: () => Promise<T>) => {
+    try {
+      return await fn()
+    } catch (err) {
+      if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } })
+      throw err
+    }
+  }
+  app.get('/api/v1/admin/integrations', coreRoute(getIntegrations))
+  app.get('/api/v1/admin/integrations/types', coreRoute(() => getAvailableIntegrationTypesAdmin()))
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id', async (request, reply) => {
+    try { return getIntegrationDetail(projectDir, request.params.id) }
+    catch (err) { if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } }); throw err }
+  })
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/secrets', async (request, reply) =>
+    asyncCore(reply, () => getIntegrationSecretStatusAdmin(projectDir, request.params.id)),
+  )
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/status', async (request, reply) =>
+    asyncCore(reply, () => getIntegrationStatus(projectDir, request.params.id)),
+  )
+  // VS-103 write operations
+  app.post<{ Body: { id: string; adapter: string; enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> } }>(
+    '/api/v1/admin/integrations',
+    async (request, reply) => {
+      const { id, adapter, enabled, config, secrets } = request.body ?? {} as Record<string, unknown>
+      if (!id || !adapter) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'id and adapter are required.' } })
+      return writeHandler(reply, () => createIntegrationAdmin(projectDir, { id, adapter, enabled, config, secrets }))
+    },
+  )
+  app.put<{ Params: { id: string }; Body: { enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> } }>(
+    '/api/v1/admin/integrations/:id',
+    async (request, reply) => writeHandler(reply, () => updateIntegrationAdmin(projectDir, request.params.id, request.body ?? {})),
+  )
+  app.delete<{ Params: { id: string } }>('/api/v1/admin/integrations/:id', async (request, reply) => {
+    try {
+      deleteIntegrationAdmin(projectDir, request.params.id)
+      return { ok: true }
+    } catch (err) {
+      if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } })
+      throw err
+    }
+  })
+  app.post<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/enable', async (request, reply) =>
+    writeHandler(reply, () => enableIntegrationAdmin(projectDir, request.params.id)),
+  )
+  app.post<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/disable', async (request, reply) =>
+    writeHandler(reply, () => disableIntegrationAdmin(projectDir, request.params.id)),
+  )
+  app.post<{ Params: { id: string; name: string }; Body: { value: string } }>(
+    '/api/v1/admin/integrations/:id/secrets/:name',
+    async (request, reply) => {
+      const { value } = request.body ?? {} as Record<string, unknown>
+      if (!value || typeof value !== 'string') return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'A secret value is required.' } })
+      return asyncCore(reply, async () => {
+        await setIntegrationSecretAdmin(projectDir, request.params.id, request.params.name, value)
+        return { ok: true }
+      })
+    },
+  )
+  app.delete<{ Params: { id: string; name: string } }>('/api/v1/admin/integrations/:id/secrets/:name', async (request, reply) =>
+    asyncCore(reply, async () => {
+      await removeIntegrationSecretAdmin(projectDir, request.params.id, request.params.name)
+      return { ok: true }
+    }),
+  )
+  app.get<{ Params: { id: string }; Querystring: { cursor?: string; pageSize?: string; statuses?: string; types?: string; labels?: string; assignees?: string; search?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items',
+    async (request, reply) => {
+      const q = request.query
+      const filters: Record<string, unknown> = {}
+      if (q.statuses) filters.statuses = q.statuses.split(',')
+      if (q.types) filters.types = q.types.split(',')
+      if (q.labels) filters.labels = q.labels.split(',')
+      if (q.assignees) filters.assignees = q.assignees.split(',')
+      if (q.search) filters.search = q.search
+      return asyncCore(reply, () => getExternalWorkItems(projectDir, request.params.id, {
+        cursor: q.cursor,
+        pageSize: q.pageSize ? Number.parseInt(q.pageSize, 10) : undefined,
+        filters: Object.keys(filters).length ? filters as import('@kaddo/cli/core').ExternalWorkItemFilters : undefined,
+      }))
+    },
+  )
+  app.get<{ Params: { id: string; externalId: string }; Querystring: { type?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items/:externalId',
+    async (request, reply) => asyncCore(reply, () => getExternalWorkItemDetail(projectDir, request.params.id, request.params.externalId)),
+  )
+  app.get<{ Params: { id: string; externalId: string }; Querystring: { type?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items/:externalId/import-preview',
+    async (request, reply) => asyncCore(reply, () => previewIntegrationImport(projectDir, request.params.id, request.params.externalId, { type: request.query.type })),
+  )
+  app.post<{ Params: { id: string; externalId: string }; Body: { type?: string } }>(
+    '/api/v1/admin/integrations/:id/work-items/:externalId/import',
+    async (request, reply) => {
+      const type = request.body?.type
+      if (!type) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'A Kaddo Work Item type is required to import.' } })
+      return asyncCore(reply, () => importIntegrationWorkItem(projectDir, request.params.id, request.params.externalId, { type }))
+    },
+  )
+  // VS-104: Discovery — query all enabled integrations in parallel
+  app.get<{ Querystring: { statuses?: string; types?: string; labels?: string; assignees?: string; search?: string; pageSize?: string; integrationIds?: string } }>(
+    '/api/v1/admin/integrations/discover',
+    async (request, reply) => {
+      const q = request.query
+      const filters: Record<string, unknown> = {}
+      if (q.statuses) filters.statuses = q.statuses.split(',')
+      if (q.types) filters.types = q.types.split(',')
+      if (q.labels) filters.labels = q.labels.split(',')
+      if (q.assignees) filters.assignees = q.assignees.split(',')
+      if (q.search) filters.search = q.search
+      return asyncCore(reply, () => discoverExternalWorkItemsAdmin(projectDir, {
+        filters: Object.keys(filters).length ? filters as import('@kaddo/cli/core').ExternalWorkItemFilters : undefined,
+        pageSize: q.pageSize ? Number.parseInt(q.pageSize, 10) : undefined,
+        integrationIds: q.integrationIds ? q.integrationIds.split(',') : undefined,
+      }))
+    },
+  )
+  // VS-104: Integration filter management
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/filters', async (request, reply) => {
+    try { return getIntegrationFiltersAdmin(projectDir, request.params.id) }
+    catch (err) { if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } }); throw err }
+  })
+  app.put<{ Params: { id: string }; Body: import('@kaddo/cli/core').ExternalWorkItemFilters }>(
+    '/api/v1/admin/integrations/:id/filters',
+    async (request, reply) => writeHandler(reply, () => updateIntegrationFiltersAdmin(projectDir, request.params.id, request.body ?? {})),
+  )
+
   app.get('/api/v1/admin/knowledge/inventory', coreRoute(getKnowledgeInventory))
   app.get<{ Params: { artifactId: string } }>('/api/v1/admin/knowledge/artifact/:artifactId', async (request) => {
     try {

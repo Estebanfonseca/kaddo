@@ -10,6 +10,8 @@ import { WorkItemDetail } from './routes/WorkItemDetail'
 import { WorkItemNew } from './routes/WorkItemNew'
 import { WorkItemEditor } from './routes/WorkItemEditor'
 import { System } from './routes/System'
+import { Integrations } from './routes/Integrations'
+import { ExternalWorkItems } from './routes/ExternalWorkItems'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -37,7 +39,10 @@ const systemRoute = createRoute({
   }),
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, knowledgeLayerRoute, knowledgeArtifactRoute, workItemsRoute, workItemNewRoute, workItemDetailRoute, workItemEditRoute, systemRoute])
+const integrationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/integrations', component: Integrations })
+const externalWorkItemsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/external-items', component: ExternalWorkItems })
+
+const routeTree = rootRoute.addChildren([indexRoute, overviewRoute, knowledgeRoute, knowledgeLayerRoute, knowledgeArtifactRoute, workItemsRoute, workItemNewRoute, workItemDetailRoute, workItemEditRoute, systemRoute, integrationsRoute, externalWorkItemsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

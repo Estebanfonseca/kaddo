@@ -1,0 +1,6 @@
+integrations:
+  - id: mock-work-source
+    adapter: mock
+    enabled: true
+    config:
+      simulate: available

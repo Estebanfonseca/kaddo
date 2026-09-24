@@ -19,12 +19,34 @@ import {
   buildRefinementHandoff as coreBuildRefinementHandoff,
   getSystemMapProjection as coreGetSystemMapProjection,
   buildTopologyEnrichmentHandoff as coreBuildTopologyHandoff,
+  listIntegrations as coreListIntegrations,
+  getIntegration as coreGetIntegration,
+  getIntegrationSecretStatus as coreGetIntegrationSecretStatus,
+  getAvailableIntegrationTypes as coreGetAvailableIntegrationTypes,
+  createIntegration as coreCreateIntegration,
+  updateIntegration as coreUpdateIntegration,
+  deleteIntegration as coreDeleteIntegration,
+  enableIntegration as coreEnableIntegration,
+  disableIntegration as coreDisableIntegration,
+  setIntegrationSecret as coreSetIntegrationSecret,
+  removeIntegrationSecret as coreRemoveIntegrationSecret,
+  verifyIntegration as coreVerifyIntegration,
+  listExternalWorkItems as coreListExternalWorkItems,
+  getExternalWorkItem as coreGetExternalWorkItem,
+  previewImport as corePreviewImport,
+  importExternalWorkItem as coreImportExternalWorkItem,
+  discoverExternalWorkItems as coreDiscoverExternalWorkItems,
+  getIntegrationFilters as coreGetIntegrationFilters,
+  updateIntegrationFilters as coreUpdateIntegrationFilters,
+  IntegrationError,
+  IntegrationServiceError,
   WorkItemWriteError,
   exists,
   join,
   readFile,
   type WorkItemFilters,
   type WorkItemInput as CoreWorkItemInput,
+  type ExternalWorkItemFilters,
 } from '@kaddo/cli/core'
 import type {
   ProjectOverview,
@@ -342,4 +364,137 @@ export class CoreError extends Error {
     super(message)
     this.name = 'CoreError'
   }
+}
+
+// --- Integrations (VS-102) ---------------------------------------------------
+// The Admin surface over the Integration Adapter Foundation. Reads never mutate; import always goes
+// through the human-confirmed Core boundary. Errors are mapped to safe CoreError codes — secrets and
+// raw provider messages are never surfaced.
+
+function mapIntegrationError(err: unknown): never {
+  if (err instanceof IntegrationError) throw new CoreError(err.code, err.safeMessage)
+  if (err instanceof IntegrationServiceError) throw new CoreError(err.code, err.message)
+  throw err as Error
+}
+
+function assertExternalId(externalId: string): void {
+  if (!externalId || externalId.includes('/') || externalId.includes('\\') || externalId.includes('..')) {
+    throw new CoreError('INVALID_EXTERNAL_ID', 'Invalid external work item identifier.')
+  }
+}
+
+export function getIntegrations(dir: string): ReturnType<typeof coreListIntegrations> {
+  return coreListIntegrations(dir)
+}
+
+export async function getIntegrationStatus(dir: string, id: string): Promise<Awaited<ReturnType<typeof coreVerifyIntegration>>> {
+  try {
+    return await coreVerifyIntegration(dir, id)
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export async function getExternalWorkItems(
+  dir: string,
+  id: string,
+  opts: { cursor?: string; pageSize?: number; filters?: ExternalWorkItemFilters },
+): Promise<Awaited<ReturnType<typeof coreListExternalWorkItems>>> {
+  try {
+    return await coreListExternalWorkItems(dir, id, { cursor: opts.cursor, pageSize: opts.pageSize, filters: opts.filters })
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export async function getExternalWorkItemDetail(dir: string, id: string, externalId: string): Promise<Awaited<ReturnType<typeof coreGetExternalWorkItem>>> {
+  assertExternalId(externalId)
+  try {
+    return await coreGetExternalWorkItem(dir, id, externalId)
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export async function previewIntegrationImport(dir: string, id: string, externalId: string, opts: { type?: string }): Promise<Awaited<ReturnType<typeof corePreviewImport>>> {
+  assertExternalId(externalId)
+  try {
+    return await corePreviewImport(dir, id, externalId, { type: opts.type })
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+/** Mutating, human-confirmed (the UI confirm) import into a canonical Draft. Requires an explicit type. */
+export async function importIntegrationWorkItem(dir: string, id: string, externalId: string, opts: { type: string }): Promise<Awaited<ReturnType<typeof coreImportExternalWorkItem>>> {
+  assertExternalId(externalId)
+  try {
+    return await coreImportExternalWorkItem(dir, id, externalId, { type: opts.type })
+  } catch (err) {
+    if (err instanceof WorkItemWriteError) throw new CoreError(err.code, err.message)
+    mapIntegrationError(err)
+  }
+}
+
+// --- Integration management (VS-103) ----------------------------------------
+
+export function getIntegrationDetail(dir: string, id: string): ReturnType<typeof coreGetIntegration> {
+  try { return coreGetIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export async function getIntegrationSecretStatusAdmin(dir: string, id: string): Promise<Awaited<ReturnType<typeof coreGetIntegrationSecretStatus>>> {
+  try { return await coreGetIntegrationSecretStatus(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function getAvailableIntegrationTypesAdmin(): ReturnType<typeof coreGetAvailableIntegrationTypes> {
+  return coreGetAvailableIntegrationTypes()
+}
+
+export function createIntegrationAdmin(dir: string, body: { id: string; adapter: string; enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }): ReturnType<typeof coreCreateIntegration> {
+  try { return coreCreateIntegration(dir, body) } catch (err) { mapIntegrationError(err) }
+}
+
+export function updateIntegrationAdmin(dir: string, id: string, body: { enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }): ReturnType<typeof coreUpdateIntegration> {
+  try { return coreUpdateIntegration(dir, id, body) } catch (err) { mapIntegrationError(err) }
+}
+
+export function deleteIntegrationAdmin(dir: string, id: string): void {
+  try { coreDeleteIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function enableIntegrationAdmin(dir: string, id: string): ReturnType<typeof coreEnableIntegration> {
+  try { return coreEnableIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function disableIntegrationAdmin(dir: string, id: string): ReturnType<typeof coreDisableIntegration> {
+  try { return coreDisableIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export async function setIntegrationSecretAdmin(dir: string, id: string, secretName: string, value: string): Promise<void> {
+  try { await coreSetIntegrationSecret(dir, id, secretName, value) } catch (err) { mapIntegrationError(err) }
+}
+
+export async function removeIntegrationSecretAdmin(dir: string, id: string, secretName: string): Promise<void> {
+  try { await coreRemoveIntegrationSecret(dir, id, secretName) } catch (err) { mapIntegrationError(err) }
+}
+
+// --- Discovery & filter management (VS-104) ----------------------------------
+
+export async function discoverExternalWorkItemsAdmin(
+  dir: string,
+  opts: { filters?: ExternalWorkItemFilters; pageSize?: number; integrationIds?: string[] },
+): Promise<Awaited<ReturnType<typeof coreDiscoverExternalWorkItems>>> {
+  try {
+    return await coreDiscoverExternalWorkItems(dir, opts)
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export function getIntegrationFiltersAdmin(dir: string, id: string): ReturnType<typeof coreGetIntegrationFilters> {
+  try { return coreGetIntegrationFilters(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function updateIntegrationFiltersAdmin(dir: string, id: string, filters: ExternalWorkItemFilters): ReturnType<typeof coreUpdateIntegrationFilters> {
+  try { return coreUpdateIntegrationFilters(dir, id, filters) } catch (err) { mapIntegrationError(err) }
 }

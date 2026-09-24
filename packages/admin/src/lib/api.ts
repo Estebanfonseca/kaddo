@@ -20,8 +20,7 @@ async function fetchApi<T>(path: string): Promise<T> {
   return res.json()
 }
 
-async function mutateApi<T>(path: string, method: 'POST' | 'PUT', body?: unknown): Promise<T> {
-  // Only send a JSON content-type when there is a body — Fastify rejects an empty JSON body (400).
+async function mutateApi<T>(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     credentials: 'include',
@@ -268,6 +267,67 @@ export type TopologyEnrichmentHandoff = { projectName: string; recommendedAgent:
 
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
+// --- Integrations (VS-102 + VS-103) ------------------------------------------
+export type IntegrationCapabilities = { workItems: { list: boolean; read: boolean; import: boolean; write?: boolean; statusSync?: boolean; comments?: boolean; webhooks?: boolean } }
+export type IntegrationStatusValue = 'configured' | 'available' | 'unavailable' | 'unauthorized' | 'invalid-config' | 'disabled'
+export type ConfigFieldSchema = {
+  type: 'string' | 'number' | 'boolean' | 'select'
+  required: boolean; label: string; description?: string; placeholder?: string
+  options?: { value: string; label: string }[]; defaultValue?: unknown
+}
+export type FilterCapabilities = {
+  types?: { supported: boolean; multiple?: boolean }
+  statuses?: { supported: boolean; multiple?: boolean }
+  labels?: { supported: boolean; multiple?: boolean }
+  assignees?: { supported: boolean; multiple?: boolean }
+  updatedAfter?: { supported: boolean }
+  search?: { supported: boolean }
+  providerQuery?: { supported: boolean; label?: string }
+}
+export type ExternalWorkItemFilters = {
+  types?: string[]; statuses?: string[]; labels?: string[]; assignees?: string[]
+  updatedAfter?: string; search?: string; providerQuery?: string
+}
+export type AdapterTypeInfo = {
+  id: string; displayName: string; description?: string; icon?: string
+  configSchema: Record<string, ConfigFieldSchema>; secretSchema: Record<string, ConfigFieldSchema>
+  filterCapabilities?: FilterCapabilities
+  capabilities: IntegrationCapabilities
+}
+export type IntegrationSummary = {
+  id: string
+  adapter: string
+  enabled: boolean
+  status: IntegrationStatusValue
+  displayName: string
+  capabilities: IntegrationCapabilities | null
+  metadata: { id: string; displayName: string; icon?: string; configSchema?: Record<string, ConfigFieldSchema>; secretSchema?: Record<string, ConfigFieldSchema>; filterCapabilities?: FilterCapabilities } | null
+  credentialRefs: string[]
+  secretRefs: string[]
+  secretStatus: Record<string, boolean>
+  filters?: ExternalWorkItemFilters
+  findings: { level: 'blocking' | 'warning'; message: string }[]
+}
+export type IntegrationStatusResult = { id: string; status: IntegrationStatusValue; connection: unknown; missingCredentials: string[]; message?: string }
+export type ExternalWorkItem = {
+  externalId: string; provider: string; title: string; description?: string; type?: string; status?: string; url?: string
+  labels?: string[]; assignees?: { id?: string; name?: string; email?: string; url?: string }[]; createdAt?: string; updatedAt?: string
+}
+export type ExternalWorkItemPage = { items: ExternalWorkItem[]; hasMore: boolean; nextCursor?: string }
+export type ImportPreview = {
+  source: { provider: string; integration: string; externalId: string; url?: string; identityKey: string; displayKey: string }
+  capturedIntent: string; description?: string; externalType?: string; externalStatus?: string; kaddoStatus: 'draft'; kaddoType: string | null; writes: false
+}
+export type ImportPreviewResult = { preview: ImportPreview; duplicate: { workItemId: string; title: string } | null }
+export type ImportResult = { workItemId: string; created: boolean; duplicateOf?: string; path?: string }
+
+// --- Discovery (VS-104) ------------------------------------------------------
+export type DiscoveryIntegrationResult = {
+  integrationId: string; adapter: string; displayName: string; icon?: string
+  items: ExternalWorkItem[]; hasMore: boolean; nextCursor?: string; error?: string
+}
+export type DiscoveryResult = { results: DiscoveryIntegrationResult[]; totalItems: number }
+
 function toQuery(filters: WorkItemFilters): string {
   const params = new URLSearchParams()
   if (filters.status && filters.status !== 'all') params.set('status', filters.status)
@@ -306,4 +366,59 @@ export const api = {
   // Refinement handoff (VS-099.1) — read-only; refinement happens externally.
   getRefinementHandoff: (workItemId: string) =>
     fetchApi<RefinementHandoff>(`/work-items/${encodeURIComponent(workItemId)}/refinement-handoff`),
+  // Integrations (VS-102 + VS-103)
+  getIntegrations: () => fetchApi<IntegrationSummary[]>('/integrations'),
+  getIntegrationTypes: () => fetchApi<AdapterTypeInfo[]>('/integrations/types'),
+  getIntegrationDetail: (id: string) => fetchApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}`),
+  getIntegrationSecretStatus: (id: string) => fetchApi<Record<string, boolean>>(`/integrations/${encodeURIComponent(id)}/secrets`),
+  getIntegrationStatus: (id: string) => fetchApi<IntegrationStatusResult>(`/integrations/${encodeURIComponent(id)}/status`),
+  createIntegration: (body: { id: string; adapter: string; enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }) =>
+    mutateApi<IntegrationSummary>('/integrations', 'POST', body),
+  updateIntegration: (id: string, body: { enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}`, 'PUT', body),
+  deleteIntegration: (id: string) =>
+    mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}`, 'DELETE'),
+  enableIntegration: (id: string) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}/enable`, 'POST'),
+  disableIntegration: (id: string) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}/disable`, 'POST'),
+  setIntegrationSecret: (id: string, name: string, value: string) =>
+    mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, 'POST', { value }),
+  removeIntegrationSecret: (id: string, name: string) =>
+    mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, 'DELETE'),
+  getExternalWorkItems: (id: string, opts: { cursor?: string; pageSize?: number; filters?: ExternalWorkItemFilters } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.cursor) p.set('cursor', opts.cursor)
+    if (opts.pageSize) p.set('pageSize', String(opts.pageSize))
+    if (opts.filters?.statuses?.length) p.set('statuses', opts.filters.statuses.join(','))
+    if (opts.filters?.types?.length) p.set('types', opts.filters.types.join(','))
+    if (opts.filters?.labels?.length) p.set('labels', opts.filters.labels.join(','))
+    if (opts.filters?.assignees?.length) p.set('assignees', opts.filters.assignees.join(','))
+    if (opts.filters?.search) p.set('search', opts.filters.search)
+    const q = p.toString()
+    return fetchApi<ExternalWorkItemPage>(`/integrations/${encodeURIComponent(id)}/work-items${q ? `?${q}` : ''}`)
+  },
+  getExternalWorkItem: (id: string, externalId: string) =>
+    fetchApi<ExternalWorkItem>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}`),
+  getImportPreview: (id: string, externalId: string, type?: string) =>
+    fetchApi<ImportPreviewResult>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}/import-preview${type ? `?type=${encodeURIComponent(type)}` : ''}`),
+  importExternalWorkItem: (id: string, externalId: string, type: string) =>
+    mutateApi<ImportResult>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}/import`, 'POST', { type }),
+  // VS-104: Discovery + filter management
+  discoverExternalWorkItems: (opts: { filters?: ExternalWorkItemFilters; pageSize?: number; integrationIds?: string[] } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.filters?.statuses?.length) p.set('statuses', opts.filters.statuses.join(','))
+    if (opts.filters?.types?.length) p.set('types', opts.filters.types.join(','))
+    if (opts.filters?.labels?.length) p.set('labels', opts.filters.labels.join(','))
+    if (opts.filters?.assignees?.length) p.set('assignees', opts.filters.assignees.join(','))
+    if (opts.filters?.search) p.set('search', opts.filters.search)
+    if (opts.pageSize) p.set('pageSize', String(opts.pageSize))
+    if (opts.integrationIds?.length) p.set('integrationIds', opts.integrationIds.join(','))
+    const q = p.toString()
+    return fetchApi<DiscoveryResult>(`/integrations/discover${q ? `?${q}` : ''}`)
+  },
+  getIntegrationFilters: (id: string) =>
+    fetchApi<ExternalWorkItemFilters>(`/integrations/${encodeURIComponent(id)}/filters`),
+  updateIntegrationFilters: (id: string, filters: ExternalWorkItemFilters) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}/filters`, 'PUT', filters),
 }

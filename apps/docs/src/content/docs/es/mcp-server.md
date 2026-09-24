@@ -126,6 +126,21 @@ tocan git. El agente inspecciona cada candidato y lo clasifica como *afectado*, 
 o *desconocido*, preservando la razón; una persona confirma antes de escribir la clasificación en el
 Work Item.
 
+## Herramientas de integraciones
+
+Acceso de solo lectura a la [Integration Adapter Foundation](/es/integrations/) — sistemas de trabajo
+externos como GitHub Issues, Jira o Azure DevOps. Leer un elemento externo nunca crea un Work Item
+Kaddo; **el import es una acción aparte, confirmada por una persona** y no se expone por MCP. Los
+secretos nunca se devuelven (solo los nombres de las variables de entorno que una credencial
+referencia).
+
+| Herramienta | Propósito |
+|---|---|
+| `kaddo_integrations_list` | Lista las integraciones configuradas y sus capabilities. |
+| `kaddo_integrations_status` | Verifica integraciones y reporta el estado de conexión (available / unauthorized / …). |
+| `kaddo_integrations_work_items` | Lista elementos de trabajo externos de una integración (paginado). |
+| `kaddo_integrations_work_item` | Lee un único elemento de trabajo externo. |
+
 ## Derived tools (escriben solo bajo `.kaddo/`)
 
 Cuando un artefacto derivado falta o está desactualizado, estas tools lo regeneran en el sitio —
