@@ -75,6 +75,30 @@ export function createMockAdapter(opts: { items?: ExternalWorkItem[]; simulate?:
       displayName: 'Mock Work Source',
       version: '1.0.0',
       description: 'Deterministic offline reference adapter for validating the integration foundation.',
+      configSchema: {
+        simulate: {
+          type: 'select',
+          required: false,
+          label: 'Simulation mode',
+          description: 'Controls what the mock adapter simulates during verify/read operations.',
+          options: [
+            { value: 'available', label: 'Available' },
+            { value: 'unauthorized', label: 'Unauthorized' },
+            { value: 'rate-limited', label: 'Rate Limited' },
+            { value: 'unavailable', label: 'Unavailable' },
+            { value: 'timeout', label: 'Timeout' },
+          ],
+          defaultValue: 'available',
+        },
+      },
+      secretSchema: {
+        token: {
+          type: 'string',
+          required: false,
+          label: 'API Token',
+          description: 'Optional token for testing secret handling (not used by the mock adapter).',
+        },
+      },
     },
     capabilities: {
       workItems: { list: true, read: true, import: true, write: false, statusSync: false, comments: false, webhooks: false },

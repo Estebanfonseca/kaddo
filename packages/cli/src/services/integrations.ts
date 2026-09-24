@@ -1,15 +1,18 @@
-// Integration service (VS-102).
+// Integration service (VS-102 + VS-103).
 //
 // The composition layer between the provider-agnostic @kaddo/integrations foundation and Kaddo Core.
 // It loads integration configuration, resolves secret references at runtime only, drives adapters for
 // read operations, and — on explicit human-confirmed import — materializes a canonical Draft Work Item
 // through Core's existing createWorkItem (no duplicate creation logic, no Git, no secrets persisted).
 //
+// VS-103 adds CRUD operations for managing integrations from Admin/CLI: create, update, delete,
+// enable/disable, and secret management through the SecretProvider abstraction.
+//
 // Adapters never write Kaddo artifacts; this service is the only place external reads cross into Core.
 
 import matter from 'gray-matter'
-import { parse as parseYaml } from 'yaml'
-import { readFile, exists, join } from '../utils/fs.js'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { readFile, writeFile, exists, join } from '../utils/fs.js'
 import { createWorkItem } from '../core/work-item-write.js'
 import { parseWorkItemSource } from '../core/work-item-source.js'
 import { discoverWorkItems } from './knowledge-artifacts.js'
@@ -17,14 +20,25 @@ import {
   createDefaultRegistry,
   parseIntegrationsConfig,
   resolveCredentials,
+  resolveAllCredentials,
+  serializeIntegrationsConfig,
+  integrationConfigFromInput,
   buildImportPreview,
   integrationError,
   IntegrationError,
+  createLocalSecretProvider,
+  createEnvSecretProvider,
+  createCompositeResolver,
+  secretRefKey,
+  type SecretProvider,
+  type SecretResolver,
   type IntegrationRegistry,
   type IntegrationConfig,
+  type IntegrationInput,
   type IntegrationContext,
   type IntegrationCapabilities,
   type IntegrationAdapterMetadata,
+  type ConfigFieldSchema,
   type ConnectionResult,
   type ExternalWorkItem,
   type ExternalWorkItemPage,
@@ -43,7 +57,13 @@ export function integrationRegistry(): IntegrationRegistry {
   return registry
 }
 
-export type IntegrationServiceErrorCode = 'INTEGRATION_NOT_CONFIGURED' | 'INTEGRATION_DISABLED' | 'INTEGRATION_INVALID_CONFIG' | 'ADAPTER_NOT_FOUND'
+export type IntegrationServiceErrorCode =
+  | 'INTEGRATION_NOT_CONFIGURED'
+  | 'INTEGRATION_DISABLED'
+  | 'INTEGRATION_INVALID_CONFIG'
+  | 'ADAPTER_NOT_FOUND'
+  | 'INTEGRATION_ALREADY_EXISTS'
+  | 'INTEGRATION_INVALID_INPUT'
 export class IntegrationServiceError extends Error {
   readonly code: IntegrationServiceErrorCode
   constructor(code: IntegrationServiceErrorCode, message: string) {
@@ -62,10 +82,12 @@ export type IntegrationSummary = {
   capabilities: IntegrationCapabilities | null
   metadata: IntegrationAdapterMetadata | null
   credentialRefs: string[]
+  secretRefs: string[]
+  secretStatus: Record<string, boolean>
   findings: IntegrationConfigFinding[]
 }
 
-// --- Config loading ----------------------------------------------------------
+// --- Config loading + writing ------------------------------------------------
 
 function loadRaw(dir: string): unknown {
   const abs = join(dir, INTEGRATIONS_FILE)
@@ -81,6 +103,12 @@ export function loadIntegrations(dir: string): { integrations: IntegrationConfig
   return parseIntegrationsConfig(loadRaw(dir), { adapterIds: registry.ids() })
 }
 
+function saveIntegrations(dir: string, integrations: IntegrationConfig[]): void {
+  const abs = join(dir, INTEGRATIONS_FILE)
+  const data = serializeIntegrationsConfig(integrations)
+  writeFile(abs, stringifyYaml(data, { lineWidth: 120 }))
+}
+
 /** Config-level status: never performs a network check (that is verifyIntegration's job). */
 function configStatus(integration: IntegrationConfig, findings: IntegrationConfigFinding[]): IntegrationStatus {
   if (!integration.enabled) return 'disabled'
@@ -88,6 +116,16 @@ function configStatus(integration: IntegrationConfig, findings: IntegrationConfi
   if (blocking || !registry.has(integration.adapter)) return 'invalid-config'
   return 'configured'
 }
+
+function secretProvider(dir: string): SecretProvider {
+  return createLocalSecretProvider(dir)
+}
+
+function secretResolver(dir: string, env: Record<string, string | undefined>): SecretResolver {
+  return createCompositeResolver(createLocalSecretProvider(dir), createEnvSecretProvider(env))
+}
+
+// --- List / get integrations -------------------------------------------------
 
 export function listIntegrations(dir: string): IntegrationSummary[] {
   const { integrations, findings } = loadIntegrations(dir)
@@ -102,16 +140,80 @@ export function listIntegrations(dir: string): IntegrationSummary[] {
       capabilities: adapter?.capabilities ?? null,
       metadata: adapter?.metadata ?? null,
       credentialRefs: Object.values(integration.credentials).map((c) => c.env),
+      secretRefs: Object.values(integration.secrets),
+      secretStatus: {},
       findings: findings.filter((f) => f.id === integration.id),
     }
   })
 }
 
-function requireIntegration(dir: string, id: string): { integration: IntegrationConfig; findings: IntegrationConfigFinding[] } {
+export function getIntegration(dir: string, id: string): IntegrationSummary {
   const { integrations, findings } = loadIntegrations(dir)
   const integration = integrations.find((i) => i.id === id)
   if (!integration) throw new IntegrationServiceError('INTEGRATION_NOT_CONFIGURED', `No integration "${id}" is configured in this project.`)
-  return { integration, findings }
+  const adapter = registry.get(integration.adapter)
+  return {
+    id: integration.id,
+    adapter: integration.adapter,
+    enabled: integration.enabled,
+    status: configStatus(integration, findings),
+    displayName: adapter?.metadata.displayName ?? integration.adapter,
+    capabilities: adapter?.capabilities ?? null,
+    metadata: adapter?.metadata ?? null,
+    credentialRefs: Object.values(integration.credentials).map((c) => c.env),
+    secretRefs: Object.values(integration.secrets),
+    secretStatus: {},
+    findings: findings.filter((f) => f.id === integration.id),
+  }
+}
+
+/** Resolve which secrets are configured (without revealing values). */
+export async function getIntegrationSecretStatus(dir: string, id: string): Promise<Record<string, boolean>> {
+  const { integrations } = loadIntegrations(dir)
+  const integration = integrations.find((i) => i.id === id)
+  if (!integration) throw new IntegrationServiceError('INTEGRATION_NOT_CONFIGURED', `No integration "${id}" is configured.`)
+  const sp = secretProvider(dir)
+  const status: Record<string, boolean> = {}
+  for (const [name, ref] of Object.entries(integration.secrets)) {
+    status[name] = await sp.exists(ref)
+  }
+  // Also check env-var credentials
+  for (const [name, ref] of Object.entries(integration.credentials)) {
+    const val = process.env[ref.env]
+    status[name] = val !== undefined && val !== ''
+  }
+  return status
+}
+
+// --- Available adapter types -------------------------------------------------
+
+export type AdapterTypeInfo = {
+  id: string
+  displayName: string
+  description?: string
+  configSchema: Record<string, ConfigFieldSchema>
+  secretSchema: Record<string, ConfigFieldSchema>
+  capabilities: IntegrationCapabilities
+}
+
+export function getAvailableIntegrationTypes(): AdapterTypeInfo[] {
+  return registry.list().map((a) => ({
+    id: a.id,
+    displayName: a.metadata.displayName,
+    description: a.metadata.description,
+    configSchema: a.metadata.configSchema ?? {},
+    secretSchema: a.metadata.secretSchema ?? {},
+    capabilities: a.capabilities,
+  }))
+}
+
+// --- Internal helpers --------------------------------------------------------
+
+function requireIntegration(dir: string, id: string): { integration: IntegrationConfig; findings: IntegrationConfigFinding[]; all: IntegrationConfig[] } {
+  const { integrations, findings } = loadIntegrations(dir)
+  const integration = integrations.find((i) => i.id === id)
+  if (!integration) throw new IntegrationServiceError('INTEGRATION_NOT_CONFIGURED', `No integration "${id}" is configured in this project.`)
+  return { integration, findings, all: integrations }
 }
 
 function resolveAdapter(integration: IntegrationConfig) {
@@ -128,6 +230,19 @@ function buildContext(integration: IntegrationConfig, env: Record<string, string
   }
 }
 
+async function buildContextWithSecrets(
+  dir: string,
+  integration: IntegrationConfig,
+  env: Record<string, string | undefined>,
+): Promise<{ context: IntegrationContext; missing: string[] }> {
+  const resolver = secretResolver(dir, env)
+  const { credentials, missing } = await resolveAllCredentials(integration, resolver, env)
+  return {
+    context: { integrationId: integration.id, config: integration.config, credentials, timeoutMs: integration.timeoutMs ?? DEFAULT_TIMEOUT_MS },
+    missing,
+  }
+}
+
 async function withTimeout<T>(op: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(integrationError('INTEGRATION_TIMEOUT')), ms) })
@@ -135,6 +250,105 @@ async function withTimeout<T>(op: Promise<T>, ms: number): Promise<T> {
     return await Promise.race([op, timeout])
   } finally {
     if (timer) clearTimeout(timer)
+  }
+}
+
+// --- CRUD operations (VS-103) ------------------------------------------------
+
+function validateId(id: string): void {
+  if (!id || !id.trim()) throw new IntegrationServiceError('INTEGRATION_INVALID_INPUT', 'Integration id is required.')
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(id)) throw new IntegrationServiceError('INTEGRATION_INVALID_INPUT', 'Integration id must be alphanumeric with dashes, dots or underscores.')
+  if (id.length > 64) throw new IntegrationServiceError('INTEGRATION_INVALID_INPUT', 'Integration id must be 64 characters or fewer.')
+}
+
+export function createIntegration(dir: string, input: IntegrationInput): IntegrationSummary {
+  validateId(input.id)
+  if (!input.adapter || !input.adapter.trim()) throw new IntegrationServiceError('INTEGRATION_INVALID_INPUT', 'An adapter type is required.')
+  const { integrations } = loadIntegrations(dir)
+  if (integrations.find((i) => i.id === input.id)) {
+    throw new IntegrationServiceError('INTEGRATION_ALREADY_EXISTS', `An integration with id "${input.id}" already exists.`)
+  }
+  const newConfig = integrationConfigFromInput(input)
+  integrations.push(newConfig)
+  saveIntegrations(dir, integrations)
+  return getIntegration(dir, input.id)
+}
+
+export type UpdateIntegrationInput = {
+  enabled?: boolean
+  config?: Record<string, unknown>
+  secrets?: Record<string, string>
+  timeoutMs?: number
+}
+
+export function updateIntegration(dir: string, id: string, input: UpdateIntegrationInput): IntegrationSummary {
+  const { integrations } = loadIntegrations(dir)
+  const idx = integrations.findIndex((i) => i.id === id)
+  if (idx < 0) throw new IntegrationServiceError('INTEGRATION_NOT_CONFIGURED', `No integration "${id}" is configured.`)
+  const existing = integrations[idx]
+  if (input.enabled !== undefined) existing.enabled = input.enabled
+  if (input.config !== undefined) existing.config = input.config
+  if (input.secrets !== undefined) existing.secrets = input.secrets
+  if (input.timeoutMs !== undefined) existing.timeoutMs = input.timeoutMs
+  integrations[idx] = existing
+  saveIntegrations(dir, integrations)
+  return getIntegration(dir, id)
+}
+
+export function deleteIntegration(dir: string, id: string): void {
+  const { integrations } = loadIntegrations(dir)
+  const idx = integrations.findIndex((i) => i.id === id)
+  if (idx < 0) throw new IntegrationServiceError('INTEGRATION_NOT_CONFIGURED', `No integration "${id}" is configured.`)
+  const removed = integrations[idx]
+  integrations.splice(idx, 1)
+  saveIntegrations(dir, integrations)
+  // Clean up secrets from the local provider
+  const sp = secretProvider(dir)
+  for (const ref of Object.values(removed.secrets)) {
+    sp.delete(ref).catch(() => {})
+  }
+}
+
+export function enableIntegration(dir: string, id: string): IntegrationSummary {
+  return updateIntegration(dir, id, { enabled: true })
+}
+
+export function disableIntegration(dir: string, id: string): IntegrationSummary {
+  return updateIntegration(dir, id, { enabled: false })
+}
+
+// --- Secret management (VS-103) ----------------------------------------------
+
+export async function setIntegrationSecret(dir: string, id: string, secretName: string, value: string): Promise<void> {
+  const { integration } = requireIntegration(dir, id)
+  const refKey = secretRefKey(id, secretName)
+  // Store the value via the local provider
+  const sp = secretProvider(dir)
+  await sp.set(refKey, value)
+  // Ensure the YAML references this secret
+  if (!integration.secrets[secretName] || integration.secrets[secretName] !== refKey) {
+    const { integrations } = loadIntegrations(dir)
+    const idx = integrations.findIndex((i) => i.id === id)
+    if (idx >= 0) {
+      integrations[idx].secrets[secretName] = refKey
+      saveIntegrations(dir, integrations)
+    }
+  }
+}
+
+export async function removeIntegrationSecret(dir: string, id: string, secretName: string): Promise<void> {
+  const { integration } = requireIntegration(dir, id)
+  const refKey = integration.secrets[secretName]
+  if (refKey) {
+    const sp = secretProvider(dir)
+    await sp.delete(refKey)
+  }
+  // Remove from YAML
+  const { integrations } = loadIntegrations(dir)
+  const idx = integrations.findIndex((i) => i.id === id)
+  if (idx >= 0 && integrations[idx].secrets[secretName]) {
+    delete integrations[idx].secrets[secretName]
+    saveIntegrations(dir, integrations)
   }
 }
 
@@ -154,7 +368,7 @@ export async function verifyIntegration(dir: string, id: string, env: Record<str
   if (cfgStatus === 'disabled') return { id, status: 'disabled', connection: null, missingCredentials: [] }
   if (cfgStatus === 'invalid-config') return { id, status: 'invalid-config', connection: null, missingCredentials: [] }
   const adapter = resolveAdapter(integration)
-  const { context, missing } = buildContext(integration, env)
+  const { context, missing } = await buildContextWithSecrets(dir, integration, env)
   try {
     const connection = await withTimeout(adapter.verifyConnection(context), context.timeoutMs)
     return { id, status: statusOf(connection), connection, missingCredentials: missing, message: connection.message }
@@ -184,7 +398,7 @@ export async function listExternalWorkItems(
   const { integration } = requireIntegration(dir, id)
   const adapter = resolveAdapter(integration)
   if (!adapter.capabilities.workItems.list) throw integrationError('UNSUPPORTED_CAPABILITY', `Adapter "${adapter.id}" cannot list work items.`)
-  const { context } = buildContext(integration, env)
+  const { context } = await buildContextWithSecrets(dir, integration, env)
   return withTimeout(adapter.listWorkItems({ context, cursor: opts.cursor, pageSize: opts.pageSize, filters: opts.filters }), context.timeoutMs)
 }
 
@@ -197,7 +411,7 @@ export async function getExternalWorkItem(
   const { integration } = requireIntegration(dir, id)
   const adapter = resolveAdapter(integration)
   if (!adapter.capabilities.workItems.read) throw integrationError('UNSUPPORTED_CAPABILITY', `Adapter "${adapter.id}" cannot read work items.`)
-  const { context } = buildContext(integration, env)
+  const { context } = await buildContextWithSecrets(dir, integration, env)
   return withTimeout(adapter.getWorkItem({ context, externalId }), context.timeoutMs)
 }
 

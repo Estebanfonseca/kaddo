@@ -20,6 +20,16 @@ import {
   getSystemMapProjection as coreGetSystemMapProjection,
   buildTopologyEnrichmentHandoff as coreBuildTopologyHandoff,
   listIntegrations as coreListIntegrations,
+  getIntegration as coreGetIntegration,
+  getIntegrationSecretStatus as coreGetIntegrationSecretStatus,
+  getAvailableIntegrationTypes as coreGetAvailableIntegrationTypes,
+  createIntegration as coreCreateIntegration,
+  updateIntegration as coreUpdateIntegration,
+  deleteIntegration as coreDeleteIntegration,
+  enableIntegration as coreEnableIntegration,
+  disableIntegration as coreDisableIntegration,
+  setIntegrationSecret as coreSetIntegrationSecret,
+  removeIntegrationSecret as coreRemoveIntegrationSecret,
   verifyIntegration as coreVerifyIntegration,
   listExternalWorkItems as coreListExternalWorkItems,
   getExternalWorkItem as coreGetExternalWorkItem,
@@ -420,4 +430,46 @@ export async function importIntegrationWorkItem(dir: string, id: string, externa
     if (err instanceof WorkItemWriteError) throw new CoreError(err.code, err.message)
     mapIntegrationError(err)
   }
+}
+
+// --- Integration management (VS-103) ----------------------------------------
+
+export function getIntegrationDetail(dir: string, id: string): ReturnType<typeof coreGetIntegration> {
+  try { return coreGetIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export async function getIntegrationSecretStatusAdmin(dir: string, id: string): Promise<Awaited<ReturnType<typeof coreGetIntegrationSecretStatus>>> {
+  try { return await coreGetIntegrationSecretStatus(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function getAvailableIntegrationTypesAdmin(): ReturnType<typeof coreGetAvailableIntegrationTypes> {
+  return coreGetAvailableIntegrationTypes()
+}
+
+export function createIntegrationAdmin(dir: string, body: { id: string; adapter: string; enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }): ReturnType<typeof coreCreateIntegration> {
+  try { return coreCreateIntegration(dir, body) } catch (err) { mapIntegrationError(err) }
+}
+
+export function updateIntegrationAdmin(dir: string, id: string, body: { enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }): ReturnType<typeof coreUpdateIntegration> {
+  try { return coreUpdateIntegration(dir, id, body) } catch (err) { mapIntegrationError(err) }
+}
+
+export function deleteIntegrationAdmin(dir: string, id: string): void {
+  try { coreDeleteIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function enableIntegrationAdmin(dir: string, id: string): ReturnType<typeof coreEnableIntegration> {
+  try { return coreEnableIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function disableIntegrationAdmin(dir: string, id: string): ReturnType<typeof coreDisableIntegration> {
+  try { return coreDisableIntegration(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export async function setIntegrationSecretAdmin(dir: string, id: string, secretName: string, value: string): Promise<void> {
+  try { await coreSetIntegrationSecret(dir, id, secretName, value) } catch (err) { mapIntegrationError(err) }
+}
+
+export async function removeIntegrationSecretAdmin(dir: string, id: string, secretName: string): Promise<void> {
+  try { await coreRemoveIntegrationSecret(dir, id, secretName) } catch (err) { mapIntegrationError(err) }
 }

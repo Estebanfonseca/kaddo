@@ -105,11 +105,44 @@ integrations:
       repository: dotear
     credentials:
       token_env: GITHUB_TOKEN     # a reference — resolved at runtime only
+    secrets:
+      apiKey: github-dotear.apiKey   # VS-103: resolved via SecretProvider
 ```
 
 An inline secret (`token: ghp_…`) is **rejected** by validation. Secrets are resolved from the
 environment only for the duration of a call and **never** appear in Work Items, Knowledge, the Graph,
 context packs, the Admin API, MCP output, logs or telemetry.
+
+### Secret management (VS-103)
+
+Kaddo supports two mechanisms for managing secrets:
+
+1. **Environment variables** (VS-102): credentials reference an env var via `token_env: VAR_NAME`.
+2. **SecretProvider** (VS-103): secrets are stored in `.kaddo/.secrets.json` (gitignored, never
+   committed) via a pluggable `SecretProvider` interface. The YAML stores only a logical reference
+   (e.g. `github-dotear.apiKey`), never the value.
+
+A **CompositeResolver** tries the local SecretProvider first, then environment variables. This means
+both mechanisms work together — local secrets take priority, env vars serve as fallback.
+
+Admin shows secrets as **"Configured"** or **"Not configured"** — values are never sent back to the
+browser after storage. Adapters declare what secrets they need via `secretSchema` metadata but never
+know where or how secrets are stored.
+
+## Admin management
+
+Kaddo Admin provides full CRUD management of integrations — no need to edit YAML by hand:
+
+- **Create** — choose an adapter type, fill dynamic forms driven by the adapter's `configSchema` and
+  `secretSchema`, and save.
+- **Edit** — update configuration or replace secrets on an existing integration.
+- **Delete** — remove an integration and its stored secrets.
+- **Enable / Disable** — toggle an integration without deleting its configuration.
+- **Verify** — test the connection with a single click.
+
+Dynamic forms are rendered from adapter metadata — no hardcoded provider-specific forms. The YAML
+file remains the single source of truth: Admin reads and writes `.kaddo/integrations.yml` directly,
+and CLI and Admin always see the same state.
 
 ## Status & connection
 

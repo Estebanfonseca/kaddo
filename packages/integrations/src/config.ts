@@ -1,8 +1,11 @@
-// Integration configuration + secret references (VS-102).
+// Integration configuration + secret references (VS-102 + VS-103).
 //
 // A project declares integrations WITHOUT storing secrets. Config carries only how to FIND a
-// credential (an environment-variable reference), never the credential itself. Validation is
-// deterministic and distinguishes missing/invalid config from missing/invalid credentials.
+// credential — an environment-variable reference (VS-102) or a logical secret-provider reference
+// (VS-103) — never the credential itself. Validation is deterministic and distinguishes
+// missing/invalid config from missing/invalid credentials.
+
+import type { SecretResolver } from './secrets.js'
 
 /** A pointer to where a secret lives at runtime — never the secret value. */
 export type SecretReference = { env: string }
@@ -12,8 +15,10 @@ export type IntegrationConfig = {
   adapter: string
   enabled: boolean
   config: Record<string, unknown>
-  /** name → secret reference (e.g. { token: { env: 'GITHUB_TOKEN' } }). Values are references only. */
+  /** name → env-var secret reference (VS-102 format). Values are references only. */
   credentials: Record<string, SecretReference>
+  /** name → logical secret reference resolved via SecretProvider (VS-103 format). Values are reference keys only. */
+  secrets: Record<string, string>
   timeoutMs?: number
 }
 
@@ -56,6 +61,28 @@ function parseCredentials(raw: unknown, id: string, findings: IntegrationConfigF
   return creds
 }
 
+function parseSecrets(raw: unknown, id: string, findings: IntegrationConfigFinding[]): Record<string, string> {
+  const secrets: Record<string, string> = {}
+  if (raw == null) return secrets
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    findings.push({ level: 'blocking', id, message: `Integration "${id}": secrets must be a mapping of logical references.` })
+    return secrets
+  }
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim()) {
+      // Reject anything that looks like an actual secret value rather than a reference name.
+      if (value.length > 100 || /^(ghp_|sk-|xox[bpsa]-|glpat-|ey[A-Za-z0-9])/i.test(value)) {
+        findings.push({ level: 'blocking', id, message: `Integration "${id}": secret "${key}" appears to contain an actual credential, not a reference name.` })
+        continue
+      }
+      secrets[key] = value.trim()
+    } else {
+      findings.push({ level: 'warning', id, message: `Integration "${id}": ignoring non-string secret entry "${key}".` })
+    }
+  }
+  return secrets
+}
+
 /**
  * Parse and validate the raw `integrations` config against the set of known adapter ids. Unknown
  * adapters, duplicate ids and missing ids are findings, not exceptions — the caller decides.
@@ -83,8 +110,9 @@ export function parseIntegrationsConfig(raw: unknown, opts: { adapterIds: Set<st
     const enabled = o.enabled === undefined ? true : o.enabled === true || o.enabled === 'true'
     const config = o.config && typeof o.config === 'object' && !Array.isArray(o.config) ? (o.config as Record<string, unknown>) : {}
     const credentials = parseCredentials(o.credentials, id, findings)
+    const secrets = parseSecrets(o.secrets, id, findings)
     const timeoutMs = typeof o.timeout_ms === 'number' ? o.timeout_ms : typeof o.timeoutMs === 'number' ? o.timeoutMs : undefined
-    integrations.push({ id, adapter, enabled, config, credentials, timeoutMs })
+    integrations.push({ id, adapter, enabled, config, credentials, secrets, timeoutMs })
   }
   return { integrations, findings }
 }
@@ -105,4 +133,84 @@ export function resolveCredentials(
     else missing.push(ref.env)
   }
   return { credentials, missing }
+}
+
+/**
+ * Resolve both env-var credentials (VS-102) and secret-provider references (VS-103) into a single
+ * credentials map for the adapter. The SecretResolver handles local + env fallback chain.
+ */
+export async function resolveAllCredentials(
+  integration: IntegrationConfig,
+  resolver: SecretResolver,
+  env: Record<string, string | undefined>,
+): Promise<{ credentials: Record<string, string>; missing: string[] }> {
+  const credentials: Record<string, string> = {}
+  const missing: string[] = []
+  // VS-102 env-var credentials
+  for (const [name, ref] of Object.entries(integration.credentials)) {
+    const value = env[ref.env]
+    if (value && value.length > 0) credentials[name] = value
+    else missing.push(ref.env)
+  }
+  // VS-103 secret-provider references
+  for (const [name, ref] of Object.entries(integration.secrets)) {
+    if (credentials[name]) continue
+    const value = await resolver.resolve(ref)
+    if (value !== undefined) credentials[name] = value
+    else missing.push(ref)
+  }
+  return { credentials, missing }
+}
+
+// --- YAML serialization (VS-103) --------------------------------------------
+
+export type IntegrationInput = {
+  id: string
+  adapter: string
+  enabled?: boolean
+  config?: Record<string, unknown>
+  secrets?: Record<string, string>
+  timeoutMs?: number
+}
+
+/**
+ * Serialize an array of integration configs to the YAML-ready object structure.
+ * Never includes actual secret values — only references.
+ */
+export function serializeIntegrationsConfig(integrations: IntegrationConfig[]): { integrations: Record<string, unknown>[] } {
+  return {
+    integrations: integrations.map((i) => {
+      const entry: Record<string, unknown> = {
+        id: i.id,
+        adapter: i.adapter,
+        enabled: i.enabled,
+      }
+      if (Object.keys(i.config).length > 0) entry.config = i.config
+      // Serialize VS-102 credentials
+      if (Object.keys(i.credentials).length > 0) {
+        const creds: Record<string, string> = {}
+        for (const [name, ref] of Object.entries(i.credentials)) {
+          creds[`${name}${ENV_SUFFIX}`] = ref.env
+        }
+        entry.credentials = creds
+      }
+      // Serialize VS-103 secrets
+      if (Object.keys(i.secrets).length > 0) entry.secrets = i.secrets
+      if (i.timeoutMs !== undefined) entry.timeout_ms = i.timeoutMs
+      return entry
+    }),
+  }
+}
+
+/** Build a new IntegrationConfig from an input, filling defaults. */
+export function integrationConfigFromInput(input: IntegrationInput): IntegrationConfig {
+  return {
+    id: input.id,
+    adapter: input.adapter,
+    enabled: input.enabled ?? true,
+    config: input.config ?? {},
+    credentials: {},
+    secrets: input.secrets ?? {},
+    timeoutMs: input.timeoutMs,
+  }
 }

@@ -26,6 +26,16 @@ import {
   getSystemMap,
   getTopologyHandoff,
   getIntegrations,
+  getIntegrationDetail,
+  getIntegrationSecretStatusAdmin,
+  getAvailableIntegrationTypesAdmin,
+  createIntegrationAdmin,
+  updateIntegrationAdmin,
+  deleteIntegrationAdmin,
+  enableIntegrationAdmin,
+  disableIntegrationAdmin,
+  setIntegrationSecretAdmin,
+  removeIntegrationSecretAdmin,
   getIntegrationStatus,
   getExternalWorkItems,
   getExternalWorkItemDetail,
@@ -232,8 +242,8 @@ export async function createAdminServer(opts: AdminServerOptions) {
   app.get('/api/v1/admin/system', coreRoute(getSystemMap))
   app.get('/api/v1/admin/system/topology-handoff', coreRoute(getTopologyHandoff))
 
-  // Integrations (VS-102). Reads are safe; import is a mutating, human-confirmed action (POST, so it
-  // is covered by the same-origin write guard). No secrets ever cross this boundary.
+  // Integrations (VS-102 + VS-103). Reads are safe; writes are covered by the same-origin guard.
+  // No secrets ever cross this boundary — only configured/not-configured status.
   const asyncCore = async <T>(reply: import('fastify').FastifyReply, fn: () => Promise<T>) => {
     try {
       return await fn()
@@ -243,8 +253,61 @@ export async function createAdminServer(opts: AdminServerOptions) {
     }
   }
   app.get('/api/v1/admin/integrations', coreRoute(getIntegrations))
+  app.get('/api/v1/admin/integrations/types', coreRoute(() => getAvailableIntegrationTypesAdmin()))
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id', async (request, reply) => {
+    try { return getIntegrationDetail(projectDir, request.params.id) }
+    catch (err) { if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } }); throw err }
+  })
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/secrets', async (request, reply) =>
+    asyncCore(reply, () => getIntegrationSecretStatusAdmin(projectDir, request.params.id)),
+  )
   app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/status', async (request, reply) =>
     asyncCore(reply, () => getIntegrationStatus(projectDir, request.params.id)),
+  )
+  // VS-103 write operations
+  app.post<{ Body: { id: string; adapter: string; enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> } }>(
+    '/api/v1/admin/integrations',
+    async (request, reply) => {
+      const { id, adapter, enabled, config, secrets } = request.body ?? {} as Record<string, unknown>
+      if (!id || !adapter) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'id and adapter are required.' } })
+      return writeHandler(reply, () => createIntegrationAdmin(projectDir, { id, adapter, enabled, config, secrets }))
+    },
+  )
+  app.put<{ Params: { id: string }; Body: { enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> } }>(
+    '/api/v1/admin/integrations/:id',
+    async (request, reply) => writeHandler(reply, () => updateIntegrationAdmin(projectDir, request.params.id, request.body ?? {})),
+  )
+  app.delete<{ Params: { id: string } }>('/api/v1/admin/integrations/:id', async (request, reply) => {
+    try {
+      deleteIntegrationAdmin(projectDir, request.params.id)
+      return { ok: true }
+    } catch (err) {
+      if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } })
+      throw err
+    }
+  })
+  app.post<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/enable', async (request, reply) =>
+    writeHandler(reply, () => enableIntegrationAdmin(projectDir, request.params.id)),
+  )
+  app.post<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/disable', async (request, reply) =>
+    writeHandler(reply, () => disableIntegrationAdmin(projectDir, request.params.id)),
+  )
+  app.post<{ Params: { id: string; name: string }; Body: { value: string } }>(
+    '/api/v1/admin/integrations/:id/secrets/:name',
+    async (request, reply) => {
+      const { value } = request.body ?? {} as Record<string, unknown>
+      if (!value || typeof value !== 'string') return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'A secret value is required.' } })
+      return asyncCore(reply, async () => {
+        await setIntegrationSecretAdmin(projectDir, request.params.id, request.params.name, value)
+        return { ok: true }
+      })
+    },
+  )
+  app.delete<{ Params: { id: string; name: string } }>('/api/v1/admin/integrations/:id/secrets/:name', async (request, reply) =>
+    asyncCore(reply, async () => {
+      await removeIntegrationSecretAdmin(projectDir, request.params.id, request.params.name)
+      return { ok: true }
+    }),
   )
   app.get<{ Params: { id: string }; Querystring: { cursor?: string; pageSize?: string; status?: string; query?: string } }>(
     '/api/v1/admin/integrations/:id/work-items',

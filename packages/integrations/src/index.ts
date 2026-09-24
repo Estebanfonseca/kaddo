@@ -1,9 +1,10 @@
-// @kaddo/integrations — Integration Adapter Foundation (VS-102).
+// @kaddo/integrations — Integration Adapter Foundation (VS-102 + VS-103).
 //
 // A provider-agnostic boundary between Kaddo and external work systems. This package owns the adapter
 // contract, registry, normalized models, configuration + secret-reference model, error/status model,
-// import-preview mapping and a reference (mock) adapter. It contains NO Work Item domain rules, Graph
-// semantics, Knowledge rules or lifecycle rules — those stay in Kaddo Core, above this boundary.
+// import-preview mapping, secret provider abstraction and a reference (mock) adapter. It contains NO
+// Work Item domain rules, Graph semantics, Knowledge rules or lifecycle rules — those stay in Kaddo
+// Core, above this boundary.
 
 export * from './contract.js'
 export * from './errors.js'
@@ -11,6 +12,7 @@ export * from './identity.js'
 export * from './config.js'
 export * from './status.js'
 export * from './preview.js'
+export * from './secrets.js'
 export { IntegrationRegistry, DuplicateAdapterError } from './registry.js'
 export { createMockAdapter, MOCK_ADAPTER_ID, type MockSimulation } from './mock-adapter.js'
 

@@ -20,8 +20,7 @@ async function fetchApi<T>(path: string): Promise<T> {
   return res.json()
 }
 
-async function mutateApi<T>(path: string, method: 'POST' | 'PUT', body?: unknown): Promise<T> {
-  // Only send a JSON content-type when there is a body — Fastify rejects an empty JSON body (400).
+async function mutateApi<T>(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     credentials: 'include',
@@ -268,9 +267,19 @@ export type TopologyEnrichmentHandoff = { projectName: string; recommendedAgent:
 
 export type WorkItemFilters = { status?: string; module?: string; query?: string }
 
-// --- Integrations (VS-102) ---------------------------------------------------
+// --- Integrations (VS-102 + VS-103) ------------------------------------------
 export type IntegrationCapabilities = { workItems: { list: boolean; read: boolean; import: boolean; write?: boolean; statusSync?: boolean; comments?: boolean; webhooks?: boolean } }
 export type IntegrationStatusValue = 'configured' | 'available' | 'unavailable' | 'unauthorized' | 'invalid-config' | 'disabled'
+export type ConfigFieldSchema = {
+  type: 'string' | 'number' | 'boolean' | 'select'
+  required: boolean; label: string; description?: string; placeholder?: string
+  options?: { value: string; label: string }[]; defaultValue?: unknown
+}
+export type AdapterTypeInfo = {
+  id: string; displayName: string; description?: string
+  configSchema: Record<string, ConfigFieldSchema>; secretSchema: Record<string, ConfigFieldSchema>
+  capabilities: IntegrationCapabilities
+}
 export type IntegrationSummary = {
   id: string
   adapter: string
@@ -278,7 +287,10 @@ export type IntegrationSummary = {
   status: IntegrationStatusValue
   displayName: string
   capabilities: IntegrationCapabilities | null
+  metadata: { id: string; displayName: string; configSchema?: Record<string, ConfigFieldSchema>; secretSchema?: Record<string, ConfigFieldSchema> } | null
   credentialRefs: string[]
+  secretRefs: string[]
+  secretStatus: Record<string, boolean>
   findings: { level: 'blocking' | 'warning'; message: string }[]
 }
 export type IntegrationStatusResult = { id: string; status: IntegrationStatusValue; connection: unknown; missingCredentials: string[]; message?: string }
@@ -332,9 +344,26 @@ export const api = {
   // Refinement handoff (VS-099.1) — read-only; refinement happens externally.
   getRefinementHandoff: (workItemId: string) =>
     fetchApi<RefinementHandoff>(`/work-items/${encodeURIComponent(workItemId)}/refinement-handoff`),
-  // Integrations (VS-102) — reads are safe; import is human-confirmed (the button) and creates a Draft.
+  // Integrations (VS-102 + VS-103)
   getIntegrations: () => fetchApi<IntegrationSummary[]>('/integrations'),
+  getIntegrationTypes: () => fetchApi<AdapterTypeInfo[]>('/integrations/types'),
+  getIntegrationDetail: (id: string) => fetchApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}`),
+  getIntegrationSecretStatus: (id: string) => fetchApi<Record<string, boolean>>(`/integrations/${encodeURIComponent(id)}/secrets`),
   getIntegrationStatus: (id: string) => fetchApi<IntegrationStatusResult>(`/integrations/${encodeURIComponent(id)}/status`),
+  createIntegration: (body: { id: string; adapter: string; enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }) =>
+    mutateApi<IntegrationSummary>('/integrations', 'POST', body),
+  updateIntegration: (id: string, body: { enabled?: boolean; config?: Record<string, unknown>; secrets?: Record<string, string> }) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}`, 'PUT', body),
+  deleteIntegration: (id: string) =>
+    mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}`, 'DELETE'),
+  enableIntegration: (id: string) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}/enable`, 'POST'),
+  disableIntegration: (id: string) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}/disable`, 'POST'),
+  setIntegrationSecret: (id: string, name: string, value: string) =>
+    mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, 'POST', { value }),
+  removeIntegrationSecret: (id: string, name: string) =>
+    mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, 'DELETE'),
   getExternalWorkItems: (id: string, opts: { cursor?: string; pageSize?: number } = {}) => {
     const p = new URLSearchParams()
     if (opts.cursor) p.set('cursor', opts.cursor)

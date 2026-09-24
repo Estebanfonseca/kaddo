@@ -8,6 +8,17 @@
 // This is deliberately distinct from Kaddo's *Agent* Adapters (Claude/Codex/Kiro/…), which project
 // project context into agent-native files. Integration Adapters connect to *external systems*.
 
+/** A field definition for dynamic form generation. Admin renders forms from these — no hardcoded provider forms. */
+export type ConfigFieldSchema = {
+  type: 'string' | 'number' | 'boolean' | 'select'
+  required: boolean
+  label: string
+  description?: string
+  placeholder?: string
+  options?: { value: string; label: string }[]
+  defaultValue?: unknown
+}
+
 /** Stable identity + presentation for an adapter (e.g. `github`, `jira`). */
 export type IntegrationAdapterMetadata = {
   id: string
@@ -15,6 +26,10 @@ export type IntegrationAdapterMetadata = {
   version: string
   description?: string
   documentationUrl?: string
+  /** Config field definitions — Admin uses these to render a dynamic configuration form. */
+  configSchema?: Record<string, ConfigFieldSchema>
+  /** Secret field definitions — Admin uses these to render credential inputs. Values are never stored in YAML. */
+  secretSchema?: Record<string, ConfigFieldSchema>
 }
 
 /**

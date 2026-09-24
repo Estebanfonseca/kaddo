@@ -169,3 +169,174 @@ describe('VS-102 integration service — import', () => {
     expect(handoff.workItemId).toBe(result.workItemId)
   })
 })
+
+// ── VS-103 — Integration CRUD Management ─────────────────────────────────
+
+describe('VS-103 integration CRUD — create', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('creates a new integration and persists it in YAML', async () => {
+    const core = await import('../src/core.js')
+    const result = core.createIntegration(dir, { id: 'new-int', adapter: 'mock' })
+    expect(result.id).toBe('new-int')
+    expect(result.adapter).toBe('mock')
+    expect(result.enabled).toBe(true)
+    expect(result.status).toBe('configured')
+    // Persisted in YAML
+    const list = core.listIntegrations(dir)
+    expect(list.some((i) => i.id === 'new-int')).toBe(true)
+  })
+
+  it('rejects duplicate ids', async () => {
+    const core = await import('../src/core.js')
+    expect(() => core.createIntegration(dir, { id: 'mock-work-source', adapter: 'mock' }))
+      .toThrow(/already exists/)
+  })
+
+  it('rejects invalid ids', async () => {
+    const core = await import('../src/core.js')
+    expect(() => core.createIntegration(dir, { id: '', adapter: 'mock' })).toThrow(/required/)
+    expect(() => core.createIntegration(dir, { id: '!bad', adapter: 'mock' })).toThrow(/alphanumeric/)
+    expect(() => core.createIntegration(dir, { id: 'a'.repeat(65), adapter: 'mock' })).toThrow(/64/)
+  })
+
+  it('rejects empty adapter', async () => {
+    const core = await import('../src/core.js')
+    expect(() => core.createIntegration(dir, { id: 'x', adapter: '' })).toThrow(/adapter type is required/)
+  })
+})
+
+describe('VS-103 integration CRUD — update', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('updates config fields and persists in YAML', async () => {
+    const core = await import('../src/core.js')
+    const updated = core.updateIntegration(dir, 'mock-work-source', { config: { simulate: 'unavailable' } })
+    expect(updated.id).toBe('mock-work-source')
+    // Re-read from disk to confirm persistence
+    const reloaded = core.getIntegration(dir, 'mock-work-source')
+    expect(reloaded.id).toBe('mock-work-source')
+  })
+
+  it('throws for nonexistent integration', async () => {
+    const core = await import('../src/core.js')
+    expect(() => core.updateIntegration(dir, 'ghost', { config: {} })).toThrow(/No integration.*configured/)
+  })
+})
+
+describe('VS-103 integration CRUD — delete', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('removes the integration from YAML', async () => {
+    const core = await import('../src/core.js')
+    core.deleteIntegration(dir, 'mock-work-source')
+    const list = core.listIntegrations(dir)
+    expect(list.find((i) => i.id === 'mock-work-source')).toBeUndefined()
+  })
+
+  it('throws for nonexistent integration', async () => {
+    const core = await import('../src/core.js')
+    expect(() => core.deleteIntegration(dir, 'nope')).toThrow(/No integration.*configured/)
+  })
+})
+
+describe('VS-103 integration CRUD — enable/disable', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('disables then re-enables an integration', async () => {
+    const core = await import('../src/core.js')
+    const disabled = core.disableIntegration(dir, 'mock-work-source')
+    expect(disabled.enabled).toBe(false)
+    expect(disabled.status).toBe('disabled')
+    const enabled = core.enableIntegration(dir, 'mock-work-source')
+    expect(enabled.enabled).toBe(true)
+    expect(enabled.status).toBe('configured')
+  })
+})
+
+describe('VS-103 integration CRUD — secret management', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('sets a secret and records the reference in YAML (not the value)', async () => {
+    const core = await import('../src/core.js')
+    await core.setIntegrationSecret(dir, 'mock-work-source', 'token', 'my-secret-value')
+    // YAML stores only the reference, never the value
+    const yaml = fs.readFileSync(path.join(dir, '.kaddo', 'integrations.yml'), 'utf-8')
+    expect(yaml).toContain('mock-work-source.token')
+    expect(yaml).not.toContain('my-secret-value')
+    // Secret status shows configured
+    const status = await core.getIntegrationSecretStatus(dir, 'mock-work-source')
+    expect(status.token).toBe(true)
+  })
+
+  it('removes a secret from both provider and YAML', async () => {
+    const core = await import('../src/core.js')
+    await core.setIntegrationSecret(dir, 'mock-work-source', 'token', 'val')
+    await core.removeIntegrationSecret(dir, 'mock-work-source', 'token')
+    const status = await core.getIntegrationSecretStatus(dir, 'mock-work-source')
+    expect(status.token).toBeFalsy()
+  })
+
+  it('secret values never leak in the IntegrationSummary', async () => {
+    const core = await import('../src/core.js')
+    await core.setIntegrationSecret(dir, 'mock-work-source', 'token', 'top-secret-123')
+    const summary = core.getIntegration(dir, 'mock-work-source')
+    const serialized = JSON.stringify(summary)
+    expect(serialized).not.toContain('top-secret-123')
+    expect(summary.secretRefs).toContain('mock-work-source.token')
+  })
+})
+
+describe('VS-103 integration CRUD — available types', () => {
+  it('returns adapter types with schema information', async () => {
+    const core = await import('../src/core.js')
+    const types = core.getAvailableIntegrationTypes()
+    expect(types.length).toBeGreaterThanOrEqual(1)
+    const mock = types.find((t) => t.id === 'mock')
+    expect(mock).toBeDefined()
+    expect(mock!.displayName).toBeDefined()
+    expect(mock!.configSchema).toBeDefined()
+    expect(mock!.secretSchema).toBeDefined()
+    expect(mock!.capabilities).toBeDefined()
+  })
+})
+
+describe('VS-103 — adapter unavailable preservation', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir() })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('config survives even if adapter is not registered', async () => {
+    write(dir, '.kaddo/config.yml', ['project:', '  name: p', '  state: pre-ai', '  structure: monorepo', 'team:', '  size: small'].join('\n'))
+    write(dir, '.kaddo/integrations.yml', [
+      'integrations:',
+      '  - id: custom-jira',
+      '    adapter: jira',
+      '    enabled: true',
+      '    config:',
+      '      baseUrl: https://company.atlassian.net',
+      '    secrets:',
+      '      token: custom-jira.token',
+    ].join('\n'))
+    const core = await import('../src/core.js')
+    const list = core.listIntegrations(dir)
+    const jira = list.find((i) => i.id === 'custom-jira')
+    expect(jira).toBeDefined()
+    expect(jira!.status).toBe('invalid-config')
+    expect(jira!.adapter).toBe('jira')
+    expect(jira!.secretRefs).toContain('custom-jira.token')
+    // YAML was not destroyed by loading with an unknown adapter
+    const updatedList = core.listIntegrations(dir)
+    expect(updatedList.find((i) => i.id === 'custom-jira')).toBeDefined()
+  })
+})

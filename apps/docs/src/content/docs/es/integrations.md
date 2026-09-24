@@ -109,11 +109,46 @@ integrations:
       repository: dotear
     credentials:
       token_env: GITHUB_TOKEN     # una referencia — se resuelve solo en runtime
+    secrets:
+      apiKey: github-dotear.apiKey   # VS-103: se resuelve vía SecretProvider
 ```
 
 Un secreto inline (`token: ghp_…`) es **rechazado** por la validación. Los secretos se resuelven
 desde el entorno solo durante la ejecución y **nunca** aparecen en Work Items, Knowledge, el Graph,
 context packs, la API de Admin, la salida de MCP, logs ni telemetría.
+
+### Gestión de secretos (VS-103)
+
+Kaddo soporta dos mecanismos para la gestión de secretos:
+
+1. **Variables de entorno** (VS-102): las credenciales referencian una variable vía
+   `token_env: NOMBRE_VAR`.
+2. **SecretProvider** (VS-103): los secretos se almacenan en `.kaddo/.secrets.json` (gitignored,
+   nunca committed) mediante una interfaz `SecretProvider` pluggable. El YAML almacena solo una
+   referencia lógica (e.g. `github-dotear.apiKey`), nunca el valor.
+
+Un **CompositeResolver** intenta primero el SecretProvider local y luego las variables de entorno.
+Ambos mecanismos funcionan juntos — los secretos locales tienen prioridad, las variables de entorno
+sirven de fallback.
+
+Admin muestra los secretos como **"Configurado"** o **"No configurado"** — los valores nunca se
+envían de vuelta al navegador después de almacenarlos. Los adapters declaran qué secretos necesitan
+vía los metadatos `secretSchema`, pero nunca saben dónde ni cómo se almacenan.
+
+## Gestión desde Admin
+
+Kaddo Admin provee gestión CRUD completa de integraciones — sin necesidad de editar el YAML a mano:
+
+- **Crear** — elige un tipo de adapter, llena formularios dinámicos generados a partir del
+  `configSchema` y `secretSchema` del adapter, y guarda.
+- **Editar** — actualiza la configuración o reemplaza secretos de una integración existente.
+- **Eliminar** — elimina una integración y sus secretos almacenados.
+- **Habilitar / Deshabilitar** — activa o desactiva una integración sin eliminar su configuración.
+- **Verificar** — prueba la conexión con un solo clic.
+
+Los formularios dinámicos se generan desde los metadatos del adapter — no hay formularios hardcoded
+por proveedor. El archivo YAML sigue siendo la única fuente de verdad: Admin lee y escribe
+`.kaddo/integrations.yml` directamente, y CLI y Admin siempre ven el mismo estado.
 
 ## Estado y conexión
 

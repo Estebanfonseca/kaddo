@@ -98,6 +98,16 @@ export {
 } from './core/system-topology.js'
 export {
   listIntegrations,
+  getIntegration,
+  getIntegrationSecretStatus,
+  getAvailableIntegrationTypes,
+  createIntegration,
+  updateIntegration,
+  deleteIntegration,
+  enableIntegration,
+  disableIntegration,
+  setIntegrationSecret,
+  removeIntegrationSecret,
   verifyIntegration,
   listExternalWorkItems,
   getExternalWorkItem,
@@ -108,6 +118,8 @@ export {
   IntegrationServiceError,
   INTEGRATIONS_FILE,
   type IntegrationSummary,
+  type AdapterTypeInfo,
+  type UpdateIntegrationInput,
   type VerifyResult,
   type ImportPreviewResult,
   type ImportResult,
@@ -123,6 +135,8 @@ export {
   type IntegrationStatus,
   type IntegrationCapabilities,
   type IntegrationAdapterMetadata,
+  type IntegrationInput,
+  type ConfigFieldSchema,
   type ConnectionResult,
 } from '../../integrations/src/index.js'
 export { exists, readFile, join, cwd } from './utils/fs.js'
