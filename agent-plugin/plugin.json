@@ -2,10 +2,10 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kaddo",
   "version": "1.0.0",
-  "description": "A practical toolkit for Knowledge Driven Development (KDD). It scans your repo, prepares context for your LLM, guides agent-based understanding, turns roadmap candidates into Work Items, declares ownership and warns when code changes may leave knowledge behind.",
+  "description": "Official Kaddo Agent Plugin for Knowledge Driven Development. Packages portable Kaddo Skills, agent guidance and @kaddo/mcp integration; Kiro is the first supported consumer.",
   "author": {
-    "name": "Esteban fonseca for Kaddo",
-    "url": "https://kaddo.trycatch.tv/es/"
+    "name": "Kaddo",
+    "url": "https://kaddo.trycatch.tv/"
   },
   "keywords": [
     "KDD",
@@ -23,7 +23,7 @@
     "implementation-planning",
     "learning-capture"
   ],
-  "homepage": "https://kaddo.trycatch.tv/es/getting-started/",
+  "homepage": "https://kaddo.trycatch.tv/",
   "repository": "https://github.com/Kaddo-kdd/kaddo/tree/main/agent-plugin",
   "license": "MIT"
 }

@@ -1,7 +1,16 @@
 ---
 name: ownership-suggestion
-description: Standardize how precise `code:` ownership globs are proposed so Guard can relate code changes to the right knowledge.
+description: "Standardize how precise `code:` ownership globs are proposed so Guard can relate code changes to the right knowledge. Use when: When a Work Item or artifact is missing ownership, or its ownership is too broad/inaccurate."
 ---
+
+<!-- Generated from packages/cli/src/skills/skills.ts. Run `pnpm agent-plugin:sync`; do not edit directly. -->
+
+# Ownership Suggestion Skill
+
+## Purpose
+
+Standardize how precise `code:` ownership globs are proposed so Guard can relate code changes to
+the right knowledge.
 
 ## When to use
 
