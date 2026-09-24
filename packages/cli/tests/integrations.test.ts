@@ -311,6 +311,141 @@ describe('VS-103 integration CRUD — available types', () => {
   })
 })
 
+// ── VS-104 — External Work Item Discovery & Filtering ─────────────────
+
+describe('VS-104 — discovery service', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('discovers items across all enabled integrations', async () => {
+    const core = await import('../src/core.js')
+    const result = await core.discoverExternalWorkItems(dir, {}, {})
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].integrationId).toBe('mock-work-source')
+    expect(result.results[0].items.length).toBe(8)
+    expect(result.results[0].icon).toBe('mock')
+    expect(result.totalItems).toBe(8)
+  })
+
+  it('applies UI filters across discovery', async () => {
+    const core = await import('../src/core.js')
+    const result = await core.discoverExternalWorkItems(dir, { filters: { types: ['Bug'] } }, {})
+    expect(result.totalItems).toBe(1)
+    expect(result.results[0].items[0].type).toBe('Bug')
+  })
+
+  it('isolates errors per integration without blocking others', async () => {
+    // Add a second integration that will fail
+    const yaml = fs.readFileSync(path.join(dir, '.kaddo', 'integrations.yml'), 'utf-8')
+    fs.writeFileSync(path.join(dir, '.kaddo', 'integrations.yml'), yaml + '\n' + [
+      '  - id: failing-source',
+      '    adapter: mock',
+      '    enabled: true',
+      '    config:',
+      '      simulate: rate-limited',
+    ].join('\n') + '\n', 'utf-8')
+    const core = await import('../src/core.js')
+    const result = await core.discoverExternalWorkItems(dir, {}, {})
+    expect(result.results).toHaveLength(2)
+    const ok = result.results.find((r) => r.integrationId === 'mock-work-source')
+    const fail = result.results.find((r) => r.integrationId === 'failing-source')
+    expect(ok!.items.length).toBe(8)
+    expect(ok!.error).toBeUndefined()
+    expect(fail!.items).toHaveLength(0)
+    expect(fail!.error).toBeDefined()
+  })
+
+  it('skips disabled integrations', async () => {
+    const core = await import('../src/core.js')
+    core.disableIntegration(dir, 'mock-work-source')
+    const result = await core.discoverExternalWorkItems(dir, {}, {})
+    expect(result.results).toHaveLength(0)
+  })
+
+  it('can scope to specific integration ids', async () => {
+    const core = await import('../src/core.js')
+    core.createIntegration(dir, { id: 'other-mock', adapter: 'mock' })
+    const result = await core.discoverExternalWorkItems(dir, { integrationIds: ['mock-work-source'] }, {})
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].integrationId).toBe('mock-work-source')
+  })
+})
+
+describe('VS-104 — filter management', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('returns empty filters for an integration without persisted filters', async () => {
+    const core = await import('../src/core.js')
+    expect(core.getIntegrationFilters(dir, 'mock-work-source')).toEqual({})
+  })
+
+  it('updates and persists filters in YAML', async () => {
+    const core = await import('../src/core.js')
+    const result = core.updateIntegrationFilters(dir, 'mock-work-source', { statuses: ['Open'], types: ['Bug'] })
+    expect(result.filters).toEqual({ statuses: ['Open'], types: ['Bug'] })
+    // Read back from YAML
+    const yaml = fs.readFileSync(path.join(dir, '.kaddo', 'integrations.yml'), 'utf-8')
+    expect(yaml).toContain('statuses')
+  })
+
+  it('clears filters when updating with empty', async () => {
+    const core = await import('../src/core.js')
+    core.updateIntegrationFilters(dir, 'mock-work-source', { statuses: ['Done'] })
+    core.updateIntegrationFilters(dir, 'mock-work-source', {})
+    const filters = core.getIntegrationFilters(dir, 'mock-work-source')
+    expect(filters).toEqual({})
+  })
+
+  it('integration filters are merged with runtime filters in listExternalWorkItems', async () => {
+    const core = await import('../src/core.js')
+    core.updateIntegrationFilters(dir, 'mock-work-source', { types: ['Bug'] })
+    const page = await core.listExternalWorkItems(dir, 'mock-work-source', {}, {})
+    expect(page.items.every((i) => i.type === 'Bug')).toBe(true)
+    expect(page.items.length).toBe(1)
+  })
+
+  it('runtime filters override integration filters', async () => {
+    const core = await import('../src/core.js')
+    core.updateIntegrationFilters(dir, 'mock-work-source', { types: ['Bug'] })
+    const page = await core.listExternalWorkItems(dir, 'mock-work-source', { filters: { types: ['Feature'] } }, {})
+    expect(page.items.every((i) => i.type === 'Feature')).toBe(true)
+  })
+
+  it('integration filters are included in IntegrationSummary', async () => {
+    const core = await import('../src/core.js')
+    core.updateIntegrationFilters(dir, 'mock-work-source', { statuses: ['Open'] })
+    const summary = core.getIntegration(dir, 'mock-work-source')
+    expect(summary.filters).toEqual({ statuses: ['Open'] })
+  })
+})
+
+describe('VS-104 — adapter type info includes filter capabilities', () => {
+  it('returns filterCapabilities and icon for mock adapter', async () => {
+    const core = await import('../src/core.js')
+    const types = core.getAvailableIntegrationTypes()
+    const mock = types.find((t) => t.id === 'mock')!
+    expect(mock.icon).toBe('mock')
+    expect(mock.filterCapabilities).toBeDefined()
+    expect(mock.filterCapabilities!.types!.supported).toBe(true)
+  })
+})
+
+describe('VS-104 — discovery does not create Work Items', () => {
+  let dir: string
+  beforeEach(() => { dir = tmpDir(); initProject(dir) })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('discovering items does not modify the project', async () => {
+    const core = await import('../src/core.js')
+    const before = countWorkItems(dir)
+    await core.discoverExternalWorkItems(dir, {}, {})
+    expect(countWorkItems(dir)).toBe(before)
+  })
+})
+
 describe('VS-103 — adapter unavailable preservation', () => {
   let dir: string
   beforeEach(() => { dir = tmpDir() })

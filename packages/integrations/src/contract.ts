@@ -19,6 +19,17 @@ export type ConfigFieldSchema = {
   defaultValue?: unknown
 }
 
+/** Declares which normalized filter fields an adapter supports. Admin uses this to render the filter configuration UI. */
+export type FilterCapabilities = {
+  types?: { supported: boolean; multiple?: boolean }
+  statuses?: { supported: boolean; multiple?: boolean }
+  labels?: { supported: boolean; multiple?: boolean }
+  assignees?: { supported: boolean; multiple?: boolean }
+  updatedAfter?: { supported: boolean }
+  search?: { supported: boolean }
+  providerQuery?: { supported: boolean; label?: string }
+}
+
 /** Stable identity + presentation for an adapter (e.g. `github`, `jira`). */
 export type IntegrationAdapterMetadata = {
   id: string
@@ -26,10 +37,13 @@ export type IntegrationAdapterMetadata = {
   version: string
   description?: string
   documentationUrl?: string
+  icon?: string
   /** Config field definitions — Admin uses these to render a dynamic configuration form. */
   configSchema?: Record<string, ConfigFieldSchema>
   /** Secret field definitions — Admin uses these to render credential inputs. Values are never stored in YAML. */
   secretSchema?: Record<string, ConfigFieldSchema>
+  /** Which normalized filter fields this adapter supports. */
+  filterCapabilities?: FilterCapabilities
 }
 
 /**
@@ -75,8 +89,20 @@ export type ExternalWorkItem = {
   rawMetadata?: Record<string, unknown>
 }
 
-/** Neutral filters. A provider implements only what it can; unsupported filters are ignored, not faked. */
-export type ExternalWorkItemFilters = { status?: string; updatedSince?: string; query?: string }
+/**
+ * Neutral filters for external work item queries. A provider implements only what it can; unsupported
+ * filters are ignored, not faked. Integration-level filters (persisted in YAML) and UI-level filters
+ * (temporary) share this same shape — the service merges them before calling the adapter.
+ */
+export type ExternalWorkItemFilters = {
+  types?: string[]
+  statuses?: string[]
+  labels?: string[]
+  assignees?: string[]
+  updatedAfter?: string
+  search?: string
+  providerQuery?: string
+}
 
 export type ListExternalWorkItemsRequest = {
   context: IntegrationContext

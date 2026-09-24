@@ -226,6 +226,62 @@ integrations:
 6. **Never** write Kaddo artifacts directly — return normalized data and let the integration service
    and Core own materialization.
 
+## External Work Item Discovery & Filtering
+
+VS-104 adds **discovery** — the ability to query all enabled integrations and see their external work
+items in a unified view, without importing any of them. This is the "browse before you buy" layer.
+
+### Discovery
+
+`discoverExternalWorkItems` queries every enabled integration that supports `list` in parallel.
+Partial failures are isolated: if one integration errors, the others still return their results.
+
+```bash
+kaddo integrations discover                        # discover items from all integrations
+kaddo integrations discover --types Bug,Feature    # filter by type
+kaddo integrations discover --search billing       # text search
+```
+
+Admin exposes the **External Items** view, which shows items grouped by integration with type badges,
+status indicators, labels, and assignees. Each item has an **Import** action (the same human-confirmed
+flow from VS-102) and an **Open** link to the provider's URL.
+
+### Integration Filters vs UI Filters
+
+Filters come in two flavors:
+
+| | Persisted in YAML | Applies to |
+|---|---|---|
+| **Integration Filters** | Yes — `.kaddo/integrations.yml` | Every query to this integration |
+| **UI Filters** | No — temporary, client-side only | The current discovery session |
+
+Integration filters set the *scope* of what Kaddo queries from a provider (e.g. "only bugs from the
+`backend` label"). UI filters narrow that further at runtime (e.g. "only the ones assigned to Alice").
+
+Both share the same `ExternalWorkItemFilters` shape:
+
+```yaml
+integrations:
+  - id: github-dotear
+    adapter: github
+    enabled: true
+    filters:
+      statuses:
+        - Open
+        - In Progress
+      labels:
+        - backend
+```
+
+The service merges them before calling the adapter — overlay fields (UI) take precedence over base
+fields (integration) when present.
+
+### Filter Capabilities
+
+Each adapter declares which filter fields it supports via `filterCapabilities` in its metadata. Admin
+uses this to render only the filter controls the adapter can actually handle — unsupported filters
+are not shown, not silently ignored.
+
 ## Out of scope (built on this foundation later)
 
 Production provider adapters, bidirectional sync, polling, webhooks, status/comment/attachment sync,

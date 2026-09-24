@@ -275,9 +275,23 @@ export type ConfigFieldSchema = {
   required: boolean; label: string; description?: string; placeholder?: string
   options?: { value: string; label: string }[]; defaultValue?: unknown
 }
+export type FilterCapabilities = {
+  types?: { supported: boolean; multiple?: boolean }
+  statuses?: { supported: boolean; multiple?: boolean }
+  labels?: { supported: boolean; multiple?: boolean }
+  assignees?: { supported: boolean; multiple?: boolean }
+  updatedAfter?: { supported: boolean }
+  search?: { supported: boolean }
+  providerQuery?: { supported: boolean; label?: string }
+}
+export type ExternalWorkItemFilters = {
+  types?: string[]; statuses?: string[]; labels?: string[]; assignees?: string[]
+  updatedAfter?: string; search?: string; providerQuery?: string
+}
 export type AdapterTypeInfo = {
-  id: string; displayName: string; description?: string
+  id: string; displayName: string; description?: string; icon?: string
   configSchema: Record<string, ConfigFieldSchema>; secretSchema: Record<string, ConfigFieldSchema>
+  filterCapabilities?: FilterCapabilities
   capabilities: IntegrationCapabilities
 }
 export type IntegrationSummary = {
@@ -287,16 +301,17 @@ export type IntegrationSummary = {
   status: IntegrationStatusValue
   displayName: string
   capabilities: IntegrationCapabilities | null
-  metadata: { id: string; displayName: string; configSchema?: Record<string, ConfigFieldSchema>; secretSchema?: Record<string, ConfigFieldSchema> } | null
+  metadata: { id: string; displayName: string; icon?: string; configSchema?: Record<string, ConfigFieldSchema>; secretSchema?: Record<string, ConfigFieldSchema>; filterCapabilities?: FilterCapabilities } | null
   credentialRefs: string[]
   secretRefs: string[]
   secretStatus: Record<string, boolean>
+  filters?: ExternalWorkItemFilters
   findings: { level: 'blocking' | 'warning'; message: string }[]
 }
 export type IntegrationStatusResult = { id: string; status: IntegrationStatusValue; connection: unknown; missingCredentials: string[]; message?: string }
 export type ExternalWorkItem = {
   externalId: string; provider: string; title: string; description?: string; type?: string; status?: string; url?: string
-  labels?: string[]; createdAt?: string; updatedAt?: string
+  labels?: string[]; assignees?: { id?: string; name?: string; email?: string; url?: string }[]; createdAt?: string; updatedAt?: string
 }
 export type ExternalWorkItemPage = { items: ExternalWorkItem[]; hasMore: boolean; nextCursor?: string }
 export type ImportPreview = {
@@ -305,6 +320,13 @@ export type ImportPreview = {
 }
 export type ImportPreviewResult = { preview: ImportPreview; duplicate: { workItemId: string; title: string } | null }
 export type ImportResult = { workItemId: string; created: boolean; duplicateOf?: string; path?: string }
+
+// --- Discovery (VS-104) ------------------------------------------------------
+export type DiscoveryIntegrationResult = {
+  integrationId: string; adapter: string; displayName: string; icon?: string
+  items: ExternalWorkItem[]; hasMore: boolean; nextCursor?: string; error?: string
+}
+export type DiscoveryResult = { results: DiscoveryIntegrationResult[]; totalItems: number }
 
 function toQuery(filters: WorkItemFilters): string {
   const params = new URLSearchParams()
@@ -364,10 +386,15 @@ export const api = {
     mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, 'POST', { value }),
   removeIntegrationSecret: (id: string, name: string) =>
     mutateApi<{ ok: boolean }>(`/integrations/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, 'DELETE'),
-  getExternalWorkItems: (id: string, opts: { cursor?: string; pageSize?: number } = {}) => {
+  getExternalWorkItems: (id: string, opts: { cursor?: string; pageSize?: number; filters?: ExternalWorkItemFilters } = {}) => {
     const p = new URLSearchParams()
     if (opts.cursor) p.set('cursor', opts.cursor)
     if (opts.pageSize) p.set('pageSize', String(opts.pageSize))
+    if (opts.filters?.statuses?.length) p.set('statuses', opts.filters.statuses.join(','))
+    if (opts.filters?.types?.length) p.set('types', opts.filters.types.join(','))
+    if (opts.filters?.labels?.length) p.set('labels', opts.filters.labels.join(','))
+    if (opts.filters?.assignees?.length) p.set('assignees', opts.filters.assignees.join(','))
+    if (opts.filters?.search) p.set('search', opts.filters.search)
     const q = p.toString()
     return fetchApi<ExternalWorkItemPage>(`/integrations/${encodeURIComponent(id)}/work-items${q ? `?${q}` : ''}`)
   },
@@ -377,4 +404,21 @@ export const api = {
     fetchApi<ImportPreviewResult>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}/import-preview${type ? `?type=${encodeURIComponent(type)}` : ''}`),
   importExternalWorkItem: (id: string, externalId: string, type: string) =>
     mutateApi<ImportResult>(`/integrations/${encodeURIComponent(id)}/work-items/${encodeURIComponent(externalId)}/import`, 'POST', { type }),
+  // VS-104: Discovery + filter management
+  discoverExternalWorkItems: (opts: { filters?: ExternalWorkItemFilters; pageSize?: number; integrationIds?: string[] } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.filters?.statuses?.length) p.set('statuses', opts.filters.statuses.join(','))
+    if (opts.filters?.types?.length) p.set('types', opts.filters.types.join(','))
+    if (opts.filters?.labels?.length) p.set('labels', opts.filters.labels.join(','))
+    if (opts.filters?.assignees?.length) p.set('assignees', opts.filters.assignees.join(','))
+    if (opts.filters?.search) p.set('search', opts.filters.search)
+    if (opts.pageSize) p.set('pageSize', String(opts.pageSize))
+    if (opts.integrationIds?.length) p.set('integrationIds', opts.integrationIds.join(','))
+    const q = p.toString()
+    return fetchApi<DiscoveryResult>(`/integrations/discover${q ? `?${q}` : ''}`)
+  },
+  getIntegrationFilters: (id: string) =>
+    fetchApi<ExternalWorkItemFilters>(`/integrations/${encodeURIComponent(id)}/filters`),
+  updateIntegrationFilters: (id: string, filters: ExternalWorkItemFilters) =>
+    mutateApi<IntegrationSummary>(`/integrations/${encodeURIComponent(id)}/filters`, 'PUT', filters),
 }

@@ -9,6 +9,7 @@ const navItems: NavItem[] = [
   { label: 'Work Items', path: '/work-items', icon: '📋' },
   { label: 'System', path: '/system', icon: '⚙' },
   { label: 'Integrations', path: '/integrations', icon: '🔌' },
+  { label: 'External Items', path: '/external-items', icon: '🔍' },
 ]
 
 export function Sidebar({ projectName }: { projectName: string }) {

@@ -114,6 +114,9 @@ export {
   findLinkedWorkItem,
   previewImport,
   importExternalWorkItem,
+  discoverExternalWorkItems,
+  getIntegrationFilters,
+  updateIntegrationFilters,
   integrationRegistry,
   IntegrationServiceError,
   INTEGRATIONS_FILE,
@@ -124,6 +127,8 @@ export {
   type ImportPreviewResult,
   type ImportResult,
   type LinkedWorkItem,
+  type DiscoveryResult,
+  type DiscoveryIntegrationResult,
 } from './services/integrations.js'
 export {
   IntegrationError,
@@ -131,6 +136,7 @@ export {
   type ExternalWorkItem,
   type ExternalWorkItemPage,
   type ExternalWorkItemFilters,
+  type FilterCapabilities,
   type ImportPreview,
   type IntegrationStatus,
   type IntegrationCapabilities,

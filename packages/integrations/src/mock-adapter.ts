@@ -29,6 +29,7 @@ const DEFAULT_ITEMS: ExternalWorkItem[] = [
     status: 'Open',
     url: 'https://example.test/mock/EXT-001',
     labels: ['registration', 'beta'],
+    assignees: [{ name: 'Alice' }],
     createdAt: '2026-01-05T10:00:00.000Z',
     updatedAt: '2026-02-01T09:30:00.000Z',
     rawMetadata: { board: 'delivery' },
@@ -42,8 +43,86 @@ const DEFAULT_ITEMS: ExternalWorkItem[] = [
     status: 'To Do',
     url: 'https://example.test/mock/EXT-002',
     labels: ['onboarding'],
+    assignees: [{ name: 'Bob' }],
     createdAt: '2026-01-08T12:00:00.000Z',
     updatedAt: '2026-01-20T15:00:00.000Z',
+  },
+  {
+    externalId: 'EXT-003',
+    provider: MOCK_ADAPTER_ID,
+    title: 'Fix authentication error on mobile',
+    description: 'Users on iOS 17 see a blank screen after OAuth redirect.',
+    type: 'Bug',
+    status: 'In Progress',
+    url: 'https://example.test/mock/EXT-003',
+    labels: ['auth', 'mobile', 'critical'],
+    assignees: [{ name: 'Alice' }],
+    createdAt: '2026-02-10T08:00:00.000Z',
+    updatedAt: '2026-03-01T14:00:00.000Z',
+  },
+  {
+    externalId: 'EXT-004',
+    provider: MOCK_ADAPTER_ID,
+    title: 'Design system token audit',
+    description: 'Review and consolidate design tokens across the component library.',
+    type: 'Task',
+    status: 'To Do',
+    url: 'https://example.test/mock/EXT-004',
+    labels: ['frontend', 'design-system'],
+    createdAt: '2026-02-15T10:00:00.000Z',
+    updatedAt: '2026-02-20T11:00:00.000Z',
+  },
+  {
+    externalId: 'EXT-005',
+    provider: MOCK_ADAPTER_ID,
+    title: 'Migrate billing service to new payment gateway',
+    description: 'Stripe v2 migration — switch from legacy Charges API to Payment Intents.',
+    type: 'Epic',
+    status: 'Open',
+    url: 'https://example.test/mock/EXT-005',
+    labels: ['billing', 'backend', 'migration'],
+    assignees: [{ name: 'Carol' }],
+    createdAt: '2026-01-20T09:00:00.000Z',
+    updatedAt: '2026-03-05T16:00:00.000Z',
+  },
+  {
+    externalId: 'EXT-006',
+    provider: MOCK_ADAPTER_ID,
+    title: 'Add CSV export to reports',
+    description: 'Users need to export analytics reports as CSV for external tools.',
+    type: 'Feature',
+    status: 'In Progress',
+    url: 'https://example.test/mock/EXT-006',
+    labels: ['reports', 'backend'],
+    assignees: [{ name: 'Bob' }],
+    createdAt: '2026-02-25T13:00:00.000Z',
+    updatedAt: '2026-03-10T10:00:00.000Z',
+  },
+  {
+    externalId: 'EXT-007',
+    provider: MOCK_ADAPTER_ID,
+    title: 'Improve search relevance scoring',
+    description: 'Tweak TF-IDF weights and add trigram matching for better search results.',
+    type: 'Task',
+    status: 'Done',
+    url: 'https://example.test/mock/EXT-007',
+    labels: ['search', 'backend'],
+    assignees: [{ name: 'Alice' }],
+    createdAt: '2026-01-12T07:00:00.000Z',
+    updatedAt: '2026-02-28T17:00:00.000Z',
+  },
+  {
+    externalId: 'EXT-008',
+    provider: MOCK_ADAPTER_ID,
+    title: 'Set up E2E test pipeline',
+    description: 'Configure Playwright tests running on every PR via GitHub Actions.',
+    type: 'Task',
+    status: 'Done',
+    url: 'https://example.test/mock/EXT-008',
+    labels: ['testing', 'ci'],
+    assignees: [{ name: 'Carol' }],
+    createdAt: '2026-01-30T11:00:00.000Z',
+    updatedAt: '2026-02-15T09:00:00.000Z',
   },
 ]
 
@@ -75,6 +154,16 @@ export function createMockAdapter(opts: { items?: ExternalWorkItem[]; simulate?:
       displayName: 'Mock Work Source',
       version: '1.0.0',
       description: 'Deterministic offline reference adapter for validating the integration foundation.',
+      icon: 'mock',
+      filterCapabilities: {
+        types: { supported: true, multiple: true },
+        statuses: { supported: true, multiple: true },
+        labels: { supported: true, multiple: true },
+        assignees: { supported: true, multiple: true },
+        updatedAfter: { supported: true },
+        search: { supported: true },
+        providerQuery: { supported: false },
+      },
       configSchema: {
         simulate: {
           type: 'select',
@@ -120,9 +209,24 @@ export function createMockAdapter(opts: { items?: ExternalWorkItem[]; simulate?:
       readFailure(simulationOf(request.context, defaultSim))
       let pool = items
       const f = request.filters
-      if (f?.status) pool = pool.filter((i) => (i.status ?? '').toLowerCase() === f.status!.toLowerCase())
-      if (f?.query) pool = pool.filter((i) => `${i.title} ${i.description ?? ''}`.toLowerCase().includes(f.query!.toLowerCase()))
-      if (f?.updatedSince) pool = pool.filter((i) => (i.updatedAt ?? '') >= f.updatedSince!)
+      if (f?.statuses?.length) {
+        const lower = f.statuses.map((s) => s.toLowerCase())
+        pool = pool.filter((i) => lower.includes((i.status ?? '').toLowerCase()))
+      }
+      if (f?.types?.length) {
+        const lower = f.types.map((t) => t.toLowerCase())
+        pool = pool.filter((i) => lower.includes((i.type ?? '').toLowerCase()))
+      }
+      if (f?.labels?.length) {
+        const lower = f.labels.map((l) => l.toLowerCase())
+        pool = pool.filter((i) => i.labels?.some((il) => lower.includes(il.toLowerCase())))
+      }
+      if (f?.assignees?.length) {
+        const lower = f.assignees.map((a) => a.toLowerCase())
+        pool = pool.filter((i) => i.assignees?.some((a) => lower.includes((a.name ?? '').toLowerCase())))
+      }
+      if (f?.search) pool = pool.filter((i) => `${i.title} ${i.description ?? ''}`.toLowerCase().includes(f.search!.toLowerCase()))
+      if (f?.updatedAfter) pool = pool.filter((i) => (i.updatedAt ?? '') >= f.updatedAfter!)
 
       const size = Math.max(1, request.pageSize ?? defaultPageSize)
       const start = request.cursor ? Math.max(0, Number.parseInt(request.cursor, 10) || 0) : 0

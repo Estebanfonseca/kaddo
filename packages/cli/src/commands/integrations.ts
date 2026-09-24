@@ -15,7 +15,7 @@ import {
   importExternalWorkItem,
   IntegrationServiceError,
 } from '../services/integrations.js'
-import { IntegrationError } from '../../../integrations/src/index.js'
+import { IntegrationError, type ExternalWorkItemFilters } from '../../../integrations/src/index.js'
 
 function requireProject(dir: string): void {
   if (!loadConfig(dir)) {
@@ -94,10 +94,13 @@ export async function runIntegrationsWorkItems(
 ): Promise<void> {
   requireProject(dir)
   try {
+    const filters: ExternalWorkItemFilters = {}
+    if (opts.status) filters.statuses = [opts.status]
+    if (opts.query) filters.search = opts.query
     const page = await listExternalWorkItems(dir, id, {
       cursor: opts.cursor,
       pageSize: opts.pageSize ? Number.parseInt(opts.pageSize, 10) : undefined,
-      filters: { status: opts.status, query: opts.query },
+      filters,
     })
     if (opts.json) return printJson(page)
     intro(`External work items · ${id}`)

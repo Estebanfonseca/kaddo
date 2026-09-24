@@ -35,6 +35,9 @@ import {
   getExternalWorkItem as coreGetExternalWorkItem,
   previewImport as corePreviewImport,
   importExternalWorkItem as coreImportExternalWorkItem,
+  discoverExternalWorkItems as coreDiscoverExternalWorkItems,
+  getIntegrationFilters as coreGetIntegrationFilters,
+  updateIntegrationFilters as coreUpdateIntegrationFilters,
   IntegrationError,
   IntegrationServiceError,
   WorkItemWriteError,
@@ -43,6 +46,7 @@ import {
   readFile,
   type WorkItemFilters,
   type WorkItemInput as CoreWorkItemInput,
+  type ExternalWorkItemFilters,
 } from '@kaddo/cli/core'
 import type {
   ProjectOverview,
@@ -394,10 +398,10 @@ export async function getIntegrationStatus(dir: string, id: string): Promise<Awa
 export async function getExternalWorkItems(
   dir: string,
   id: string,
-  opts: { cursor?: string; pageSize?: number; status?: string; query?: string },
+  opts: { cursor?: string; pageSize?: number; filters?: ExternalWorkItemFilters },
 ): Promise<Awaited<ReturnType<typeof coreListExternalWorkItems>>> {
   try {
-    return await coreListExternalWorkItems(dir, id, { cursor: opts.cursor, pageSize: opts.pageSize, filters: { status: opts.status, query: opts.query } })
+    return await coreListExternalWorkItems(dir, id, { cursor: opts.cursor, pageSize: opts.pageSize, filters: opts.filters })
   } catch (err) {
     mapIntegrationError(err)
   }
@@ -472,4 +476,25 @@ export async function setIntegrationSecretAdmin(dir: string, id: string, secretN
 
 export async function removeIntegrationSecretAdmin(dir: string, id: string, secretName: string): Promise<void> {
   try { await coreRemoveIntegrationSecret(dir, id, secretName) } catch (err) { mapIntegrationError(err) }
+}
+
+// --- Discovery & filter management (VS-104) ----------------------------------
+
+export async function discoverExternalWorkItemsAdmin(
+  dir: string,
+  opts: { filters?: ExternalWorkItemFilters; pageSize?: number; integrationIds?: string[] },
+): Promise<Awaited<ReturnType<typeof coreDiscoverExternalWorkItems>>> {
+  try {
+    return await coreDiscoverExternalWorkItems(dir, opts)
+  } catch (err) {
+    mapIntegrationError(err)
+  }
+}
+
+export function getIntegrationFiltersAdmin(dir: string, id: string): ReturnType<typeof coreGetIntegrationFilters> {
+  try { return coreGetIntegrationFilters(dir, id) } catch (err) { mapIntegrationError(err) }
+}
+
+export function updateIntegrationFiltersAdmin(dir: string, id: string, filters: ExternalWorkItemFilters): ReturnType<typeof coreUpdateIntegrationFilters> {
+  try { return coreUpdateIntegrationFilters(dir, id, filters) } catch (err) { mapIntegrationError(err) }
 }

@@ -43,9 +43,11 @@ import {
   type ExternalWorkItem,
   type ExternalWorkItemPage,
   type ExternalWorkItemFilters,
+  type FilterCapabilities,
   type ImportPreview,
   type IntegrationStatus,
   type IntegrationConfigFinding,
+  mergeFilters,
 } from '../../../integrations/src/index.js'
 
 export const INTEGRATIONS_FILE = '.kaddo/integrations.yml'
@@ -84,6 +86,7 @@ export type IntegrationSummary = {
   credentialRefs: string[]
   secretRefs: string[]
   secretStatus: Record<string, boolean>
+  filters?: ExternalWorkItemFilters
   findings: IntegrationConfigFinding[]
 }
 
@@ -142,6 +145,7 @@ export function listIntegrations(dir: string): IntegrationSummary[] {
       credentialRefs: Object.values(integration.credentials).map((c) => c.env),
       secretRefs: Object.values(integration.secrets),
       secretStatus: {},
+      filters: integration.filters,
       findings: findings.filter((f) => f.id === integration.id),
     }
   })
@@ -163,6 +167,7 @@ export function getIntegration(dir: string, id: string): IntegrationSummary {
     credentialRefs: Object.values(integration.credentials).map((c) => c.env),
     secretRefs: Object.values(integration.secrets),
     secretStatus: {},
+    filters: integration.filters,
     findings: findings.filter((f) => f.id === integration.id),
   }
 }
@@ -191,8 +196,10 @@ export type AdapterTypeInfo = {
   id: string
   displayName: string
   description?: string
+  icon?: string
   configSchema: Record<string, ConfigFieldSchema>
   secretSchema: Record<string, ConfigFieldSchema>
+  filterCapabilities?: FilterCapabilities
   capabilities: IntegrationCapabilities
 }
 
@@ -201,8 +208,10 @@ export function getAvailableIntegrationTypes(): AdapterTypeInfo[] {
     id: a.id,
     displayName: a.metadata.displayName,
     description: a.metadata.description,
+    icon: a.metadata.icon,
     configSchema: a.metadata.configSchema ?? {},
     secretSchema: a.metadata.secretSchema ?? {},
+    filterCapabilities: a.metadata.filterCapabilities,
     capabilities: a.capabilities,
   }))
 }
@@ -387,6 +396,103 @@ function statusOf(connection: ConnectionResult): IntegrationStatus {
   }
 }
 
+// --- Filter management (VS-104) ----------------------------------------------
+
+export function getIntegrationFilters(dir: string, id: string): ExternalWorkItemFilters {
+  const { integration } = requireIntegration(dir, id)
+  return integration.filters ?? {}
+}
+
+export function updateIntegrationFilters(dir: string, id: string, filters: ExternalWorkItemFilters): IntegrationSummary {
+  const { integrations } = loadIntegrations(dir)
+  const idx = integrations.findIndex((i) => i.id === id)
+  if (idx < 0) throw new IntegrationServiceError('INTEGRATION_NOT_CONFIGURED', `No integration "${id}" is configured.`)
+  const clean: ExternalWorkItemFilters = {}
+  let hasAny = false
+  if (filters.types?.length) { clean.types = filters.types; hasAny = true }
+  if (filters.statuses?.length) { clean.statuses = filters.statuses; hasAny = true }
+  if (filters.labels?.length) { clean.labels = filters.labels; hasAny = true }
+  if (filters.assignees?.length) { clean.assignees = filters.assignees; hasAny = true }
+  if (filters.updatedAfter) { clean.updatedAfter = filters.updatedAfter; hasAny = true }
+  if (filters.search) { clean.search = filters.search; hasAny = true }
+  if (filters.providerQuery) { clean.providerQuery = filters.providerQuery; hasAny = true }
+  integrations[idx].filters = hasAny ? clean : undefined
+  saveIntegrations(dir, integrations)
+  return getIntegration(dir, id)
+}
+
+// --- Discovery (VS-104) ------------------------------------------------------
+
+export type DiscoveryIntegrationResult = {
+  integrationId: string
+  adapter: string
+  displayName: string
+  icon?: string
+  items: ExternalWorkItem[]
+  hasMore: boolean
+  nextCursor?: string
+  error?: string
+}
+
+export type DiscoveryResult = {
+  results: DiscoveryIntegrationResult[]
+  totalItems: number
+}
+
+export async function discoverExternalWorkItems(
+  dir: string,
+  opts: { filters?: ExternalWorkItemFilters; pageSize?: number; integrationIds?: string[] } = {},
+  env: Record<string, string | undefined> = process.env,
+): Promise<DiscoveryResult> {
+  const { integrations, findings } = loadIntegrations(dir)
+  const candidates = integrations.filter((i) => {
+    if (!i.enabled) return false
+    if (configStatus(i, findings) === 'invalid-config') return false
+    if (opts.integrationIds?.length && !opts.integrationIds.includes(i.id)) return false
+    const adapter = registry.get(i.adapter)
+    return adapter?.capabilities.workItems.list === true
+  })
+
+  const settled = await Promise.allSettled(
+    candidates.map(async (integration): Promise<DiscoveryIntegrationResult> => {
+      const adapter = resolveAdapter(integration)
+      const { context } = await buildContextWithSecrets(dir, integration, env)
+      const filters = mergeFilters(integration.filters, opts.filters)
+      const page = await withTimeout(
+        adapter.listWorkItems({ context, pageSize: opts.pageSize, filters }),
+        context.timeoutMs,
+      )
+      return {
+        integrationId: integration.id,
+        adapter: integration.adapter,
+        displayName: adapter.metadata.displayName,
+        icon: adapter.metadata.icon,
+        items: page.items,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
+      }
+    }),
+  )
+
+  const results: DiscoveryIntegrationResult[] = settled.map((s, i) => {
+    if (s.status === 'fulfilled') return s.value
+    const integration = candidates[i]
+    const adapter = registry.get(integration.adapter)
+    const msg = s.reason instanceof IntegrationError ? s.reason.safeMessage : 'An unexpected error occurred.'
+    return {
+      integrationId: integration.id,
+      adapter: integration.adapter,
+      displayName: adapter?.metadata.displayName ?? integration.adapter,
+      icon: adapter?.metadata.icon,
+      items: [],
+      hasMore: false,
+      error: msg,
+    }
+  })
+
+  return { results, totalItems: results.reduce((sum, r) => sum + r.items.length, 0) }
+}
+
 // --- Reading -----------------------------------------------------------------
 
 export async function listExternalWorkItems(
@@ -399,7 +505,8 @@ export async function listExternalWorkItems(
   const adapter = resolveAdapter(integration)
   if (!adapter.capabilities.workItems.list) throw integrationError('UNSUPPORTED_CAPABILITY', `Adapter "${adapter.id}" cannot list work items.`)
   const { context } = await buildContextWithSecrets(dir, integration, env)
-  return withTimeout(adapter.listWorkItems({ context, cursor: opts.cursor, pageSize: opts.pageSize, filters: opts.filters }), context.timeoutMs)
+  const filters = mergeFilters(integration.filters, opts.filters)
+  return withTimeout(adapter.listWorkItems({ context, cursor: opts.cursor, pageSize: opts.pageSize, filters }), context.timeoutMs)
 }
 
 export async function getExternalWorkItem(

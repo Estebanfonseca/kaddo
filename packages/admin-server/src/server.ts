@@ -41,6 +41,9 @@ import {
   getExternalWorkItemDetail,
   previewIntegrationImport,
   importIntegrationWorkItem,
+  discoverExternalWorkItemsAdmin,
+  getIntegrationFiltersAdmin,
+  updateIntegrationFiltersAdmin,
   CoreError,
 } from './core-adapter.js'
 import {
@@ -309,14 +312,22 @@ export async function createAdminServer(opts: AdminServerOptions) {
       return { ok: true }
     }),
   )
-  app.get<{ Params: { id: string }; Querystring: { cursor?: string; pageSize?: string; status?: string; query?: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { cursor?: string; pageSize?: string; statuses?: string; types?: string; labels?: string; assignees?: string; search?: string } }>(
     '/api/v1/admin/integrations/:id/work-items',
-    async (request, reply) => asyncCore(reply, () => getExternalWorkItems(projectDir, request.params.id, {
-      cursor: request.query.cursor,
-      pageSize: request.query.pageSize ? Number.parseInt(request.query.pageSize, 10) : undefined,
-      status: request.query.status,
-      query: request.query.query,
-    })),
+    async (request, reply) => {
+      const q = request.query
+      const filters: Record<string, unknown> = {}
+      if (q.statuses) filters.statuses = q.statuses.split(',')
+      if (q.types) filters.types = q.types.split(',')
+      if (q.labels) filters.labels = q.labels.split(',')
+      if (q.assignees) filters.assignees = q.assignees.split(',')
+      if (q.search) filters.search = q.search
+      return asyncCore(reply, () => getExternalWorkItems(projectDir, request.params.id, {
+        cursor: q.cursor,
+        pageSize: q.pageSize ? Number.parseInt(q.pageSize, 10) : undefined,
+        filters: Object.keys(filters).length ? filters as import('@kaddo/cli/core').ExternalWorkItemFilters : undefined,
+      }))
+    },
   )
   app.get<{ Params: { id: string; externalId: string }; Querystring: { type?: string } }>(
     '/api/v1/admin/integrations/:id/work-items/:externalId',
@@ -334,6 +345,34 @@ export async function createAdminServer(opts: AdminServerOptions) {
       return asyncCore(reply, () => importIntegrationWorkItem(projectDir, request.params.id, request.params.externalId, { type }))
     },
   )
+  // VS-104: Discovery — query all enabled integrations in parallel
+  app.get<{ Querystring: { statuses?: string; types?: string; labels?: string; assignees?: string; search?: string; pageSize?: string; integrationIds?: string } }>(
+    '/api/v1/admin/integrations/discover',
+    async (request, reply) => {
+      const q = request.query
+      const filters: Record<string, unknown> = {}
+      if (q.statuses) filters.statuses = q.statuses.split(',')
+      if (q.types) filters.types = q.types.split(',')
+      if (q.labels) filters.labels = q.labels.split(',')
+      if (q.assignees) filters.assignees = q.assignees.split(',')
+      if (q.search) filters.search = q.search
+      return asyncCore(reply, () => discoverExternalWorkItemsAdmin(projectDir, {
+        filters: Object.keys(filters).length ? filters as import('@kaddo/cli/core').ExternalWorkItemFilters : undefined,
+        pageSize: q.pageSize ? Number.parseInt(q.pageSize, 10) : undefined,
+        integrationIds: q.integrationIds ? q.integrationIds.split(',') : undefined,
+      }))
+    },
+  )
+  // VS-104: Integration filter management
+  app.get<{ Params: { id: string } }>('/api/v1/admin/integrations/:id/filters', async (request, reply) => {
+    try { return getIntegrationFiltersAdmin(projectDir, request.params.id) }
+    catch (err) { if (err instanceof CoreError) return reply.code(statusForCode(err.code)).send({ error: { code: err.code, message: err.message } }); throw err }
+  })
+  app.put<{ Params: { id: string }; Body: import('@kaddo/cli/core').ExternalWorkItemFilters }>(
+    '/api/v1/admin/integrations/:id/filters',
+    async (request, reply) => writeHandler(reply, () => updateIntegrationFiltersAdmin(projectDir, request.params.id, request.body ?? {})),
+  )
+
   app.get('/api/v1/admin/knowledge/inventory', coreRoute(getKnowledgeInventory))
   app.get<{ Params: { artifactId: string } }>('/api/v1/admin/knowledge/artifact/:artifactId', async (request) => {
     try {

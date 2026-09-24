@@ -234,6 +234,64 @@ integrations:
 6. **Nunca** escribas artifacts de Kaddo directamente — devuelve datos normalizados y deja que el
    integration service y Core sean dueños de la materialización.
 
+## Descubrimiento y Filtrado de Work Items Externos
+
+VS-104 agrega **descubrimiento** — la capacidad de consultar todas las integraciones habilitadas y ver
+sus work items externos en una vista unificada, sin importar ninguno. Es la capa de "explorar antes de
+actuar".
+
+### Descubrimiento
+
+`discoverExternalWorkItems` consulta en paralelo cada integración habilitada que soporte `list`.
+Los fallos parciales se aíslan: si una integración falla, las demás devuelven sus resultados.
+
+```bash
+kaddo integrations discover                        # descubrir items de todas las integraciones
+kaddo integrations discover --types Bug,Feature    # filtrar por tipo
+kaddo integrations discover --search billing       # búsqueda de texto
+```
+
+Admin expone la vista **External Items**, que muestra los items agrupados por integración con badges
+de tipo, indicadores de estado, etiquetas y asignados. Cada item tiene una acción **Import** (el mismo
+flujo de confirmación humana de VS-102) y un enlace **Open** a la URL del proveedor.
+
+### Filtros de Integración vs Filtros de UI
+
+Los filtros vienen en dos sabores:
+
+| | Persistidos en YAML | Se aplica a |
+|---|---|---|
+| **Filtros de Integración** | Sí — `.kaddo/integrations.yml` | Cada consulta a esta integración |
+| **Filtros de UI** | No — temporales, solo del lado del cliente | La sesión de descubrimiento actual |
+
+Los filtros de integración definen el *alcance* de lo que Kaddo consulta del proveedor (ej. "solo bugs
+de la etiqueta `backend`"). Los filtros de UI refinan aún más en tiempo de ejecución (ej. "solo los
+asignados a Alice").
+
+Ambos comparten la misma forma `ExternalWorkItemFilters`:
+
+```yaml
+integrations:
+  - id: github-dotear
+    adapter: github
+    enabled: true
+    filters:
+      statuses:
+        - Open
+        - In Progress
+      labels:
+        - backend
+```
+
+El servicio los fusiona antes de llamar al adapter — los campos del overlay (UI) tienen prioridad
+sobre los campos base (integración) cuando están presentes.
+
+### Capacidades de Filtrado
+
+Cada adapter declara qué campos de filtro soporta vía `filterCapabilities` en sus metadatos. Admin
+usa esto para renderizar solo los controles de filtro que el adapter puede manejar — los filtros no
+soportados no se muestran, no se ignoran silenciosamente.
+
 ## Fuera de alcance (se construye sobre esta foundation)
 
 Los adapters de proveedores en producción, la sincronización bidireccional, el polling, los webhooks,

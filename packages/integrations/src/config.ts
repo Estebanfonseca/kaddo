@@ -6,6 +6,7 @@
 // missing/invalid config from missing/invalid credentials.
 
 import type { SecretResolver } from './secrets.js'
+import type { ExternalWorkItemFilters } from './contract.js'
 
 /** A pointer to where a secret lives at runtime — never the secret value. */
 export type SecretReference = { env: string }
@@ -19,6 +20,8 @@ export type IntegrationConfig = {
   credentials: Record<string, SecretReference>
   /** name → logical secret reference resolved via SecretProvider (VS-103 format). Values are reference keys only. */
   secrets: Record<string, string>
+  /** Persistent discovery filters — determines the scope of what Kaddo queries from this integration. */
+  filters?: ExternalWorkItemFilters
   timeoutMs?: number
 }
 
@@ -83,6 +86,32 @@ function parseSecrets(raw: unknown, id: string, findings: IntegrationConfigFindi
   return secrets
 }
 
+function toStringArray(raw: unknown): string[] | undefined {
+  if (raw == null) return undefined
+  if (Array.isArray(raw)) return raw.filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim())
+  if (typeof raw === 'string' && raw.trim()) return [raw.trim()]
+  return undefined
+}
+
+function parseFilters(raw: unknown): ExternalWorkItemFilters | undefined {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const filters: ExternalWorkItemFilters = {}
+  let hasAny = false
+  const types = toStringArray(o.types)
+  if (types?.length) { filters.types = types; hasAny = true }
+  const statuses = toStringArray(o.statuses)
+  if (statuses?.length) { filters.statuses = statuses; hasAny = true }
+  const labels = toStringArray(o.labels)
+  if (labels?.length) { filters.labels = labels; hasAny = true }
+  const assignees = toStringArray(o.assignees)
+  if (assignees?.length) { filters.assignees = assignees; hasAny = true }
+  if (typeof o.updatedAfter === 'string' && o.updatedAfter.trim()) { filters.updatedAfter = o.updatedAfter.trim(); hasAny = true }
+  if (typeof o.search === 'string' && o.search.trim()) { filters.search = o.search.trim(); hasAny = true }
+  if (typeof o.providerQuery === 'string' && o.providerQuery.trim()) { filters.providerQuery = o.providerQuery.trim(); hasAny = true }
+  return hasAny ? filters : undefined
+}
+
 /**
  * Parse and validate the raw `integrations` config against the set of known adapter ids. Unknown
  * adapters, duplicate ids and missing ids are findings, not exceptions — the caller decides.
@@ -111,8 +140,9 @@ export function parseIntegrationsConfig(raw: unknown, opts: { adapterIds: Set<st
     const config = o.config && typeof o.config === 'object' && !Array.isArray(o.config) ? (o.config as Record<string, unknown>) : {}
     const credentials = parseCredentials(o.credentials, id, findings)
     const secrets = parseSecrets(o.secrets, id, findings)
+    const filters = parseFilters(o.filters)
     const timeoutMs = typeof o.timeout_ms === 'number' ? o.timeout_ms : typeof o.timeoutMs === 'number' ? o.timeoutMs : undefined
-    integrations.push({ id, adapter, enabled, config, credentials, secrets, timeoutMs })
+    integrations.push({ id, adapter, enabled, config, credentials, secrets, filters, timeoutMs })
   }
   return { integrations, findings }
 }
@@ -170,6 +200,7 @@ export type IntegrationInput = {
   enabled?: boolean
   config?: Record<string, unknown>
   secrets?: Record<string, string>
+  filters?: ExternalWorkItemFilters
   timeoutMs?: number
 }
 
@@ -196,6 +227,8 @@ export function serializeIntegrationsConfig(integrations: IntegrationConfig[]): 
       }
       // Serialize VS-103 secrets
       if (Object.keys(i.secrets).length > 0) entry.secrets = i.secrets
+      // Serialize VS-104 filters
+      if (i.filters && Object.keys(i.filters).length > 0) entry.filters = i.filters
       if (i.timeoutMs !== undefined) entry.timeout_ms = i.timeoutMs
       return entry
     }),
@@ -211,6 +244,23 @@ export function integrationConfigFromInput(input: IntegrationInput): Integration
     config: input.config ?? {},
     credentials: {},
     secrets: input.secrets ?? {},
+    filters: input.filters,
     timeoutMs: input.timeoutMs,
+  }
+}
+
+/** Merge two filter sets — the overlay fields take priority when present. */
+export function mergeFilters(base?: ExternalWorkItemFilters, overlay?: ExternalWorkItemFilters): ExternalWorkItemFilters {
+  if (!base && !overlay) return {}
+  if (!base) return { ...overlay }
+  if (!overlay) return { ...base }
+  return {
+    types: overlay.types?.length ? overlay.types : base.types,
+    statuses: overlay.statuses?.length ? overlay.statuses : base.statuses,
+    labels: overlay.labels?.length ? overlay.labels : base.labels,
+    assignees: overlay.assignees?.length ? overlay.assignees : base.assignees,
+    updatedAfter: overlay.updatedAfter ?? base.updatedAfter,
+    search: overlay.search ?? base.search,
+    providerQuery: overlay.providerQuery ?? base.providerQuery,
   }
 }

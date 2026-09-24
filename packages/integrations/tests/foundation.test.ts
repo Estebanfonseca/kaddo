@@ -140,7 +140,7 @@ describe('VS-102 mock adapter — connection, reading, pagination, errors', () =
     expect(first.nextCursor).toBeDefined()
     const second = await a.listWorkItems({ context: ctx(), pageSize: 1, cursor: first.nextCursor })
     expect(second.items[0].externalId).not.toBe(first.items[0].externalId)
-    expect(second.hasMore).toBe(false)
+    expect(second.items).toHaveLength(1)
     const item = await a.getWorkItem({ context: ctx(), externalId: 'EXT-001' })
     expect(item?.title).toMatch(/registration/i)
     expect(await a.getWorkItem({ context: ctx(), externalId: 'nope' })).toBeNull()
